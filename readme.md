@@ -1,175 +1,268 @@
-# Agent-to-Agent (A2A) Security Pipeline with MCP Integration
+# Agent Engineering Bootcamp: Developers Edition
 
-This project implements a security-focused data processing pipeline using the Agent-to-Agent (A2A) protocol combined with Model Context Protocol (MCP) integration. The system provides secure database queries through a multi-agent architecture.
+Welcome to the official course repository for **Agent Engineering Bootcamp: Developers Edition**.
 
-## System Architecture
+This repo is for **anyone** and contains all code, exercises, templates, and project materials used throughout the course.
 
-The system utilizes a layered architecture:
+**What makes this different?**
+A structured 4-part journey from deployment efficiency to validated action. Master the complete agentic systems stack: LLM optimization, hybrid memory models (RAG + Knowledge Graphs), ReAct agents with orchestration, and production-grade evaluation frameworks. Build AI systems that are fast, intelligent, safe, and production-ready.
 
-1. **A2A Protocol Layer**: Provides standardized communication between clients and agent services
-2. **ADK Framework Layer**: Manages agent behavior and tool integration
-3. **MCP Server Layer**: Provides specialized SQL and data processing tools
+🔗 [Visit course page](https://maven.com/boring-bot/advanced-llm) • 💾 [Save $200 with code 200OFF](https://maven.com/boring-bot/advanced-llm?promoCode=200OFF)
 
-### Components
+---
+<img width="2752" height="1536" alt="unnamed-3" src="https://github.com/user-attachments/assets/a206c511-5e8b-42ce-abc2-f8e36f87861d" />
 
-- **A2A Servers**: Handle client requests and agent communication
-- **ADK Agents**: Process natural language requests using specialized tools
-- **MCP Server**: Provides SQL query and database interaction tools
-- **Task Managers**: Coordinate task execution across agents
 
-## Agent Pipeline
+## Quick Links
 
-The system implements a security pipeline with three specialized agents:
+### Course Structure: From Efficiency to Action
 
-1. **Judge Agent**: Evaluates input for security threats (SQL injection, XSS, etc.)
-2. **SQL Agent**: Performs database queries and analysis using MCP tools
-3. **Mask Agent**: Applies privacy protection to sensitive data in results
+- [Part 1: Deployment & Efficiency](#part-1-deployment--efficiency)
+- [Part 2: Retrieval & Memory](#part-2-retrieval--memory)
+- [Part 3: Acting & Control](#part-3-acting--control)
+- [Part 4: Evals as Engineering Discipline](#part-4-evals-as-engineering-discipline)
+- [Technology Stack](#technology-stack)
+- [What You'll Build](#what-youll-build)
 
-## Flow Diagram
+---
 
-```
-Client Request → A2A Server → Judge Agent → SQL Agent → Mask Agent → Client Response
-```
+## Recommended Resource
 
-## Key Features
+If you'd like to deepen your understanding of building LLM applications, refer to this book:
 
-- **Security Threat Detection**: Identifies and blocks malicious inputs via tool and Model Armor
-- **SQL Query Analysis**: Processes database queries using natural language
-- **PII Data Protection**: Masks personally identifiable information in results using DLP
-- **A2A Protocol Compliance**: Implements standardized agent communication
-- **MCP Integration**: Leverages Model Context Protocol tools for enhanced capabilities
+[**Build LLM Applications from Scratch**](https://www.manning.com/books/build-llm-applications-from-scratch)
 
-## Installation
+---
 
-### Prerequisites
+## How to Use This Repo
 
-- Python 3.8+
-- aiohttp
-- FastAPI
-- Google ADK
-- Google Generative AI packages
-- uvicorn
+- This repo contains supplemental content for the course. Content is organized **week by week**, aligned with live sessions and project milestones.
+- **Google Colab Pro** is the preferred environment for running notebooks.
+- You may also **clone the repo locally** and run notebooks using Jupyter or your IDE.
+- Each notebook includes its own dependencies via `!pip install` — there is **no global `requirements.txt`**.
 
-### Setup
+---
 
-1. Clone the repository
-2. Install dependencies: `pip install -r requirements.txt`
-3. Configure API keys in environment variables (even better, use secret manager)
-4. Have fun
-
-## Usage
-
-### Starting the Servers
-
-Run the `adk web` script to run the chat interface:
+## Cloning the Repository (Optional)
 
 ```bash
-adk web
+git clone https://github.com/yourusername/enterprise-rag-agents.git
+cd enterprise-rag-agents
+python3 -m venv venv
+source venv/bin/activate
 ```
 
-This will start:
-- Judge Server (port 10002)
-- Mask Server (port 10003)
-- SQL Server (port 10004)
-- MCP Server
+## Course Curriculum
 
+> **The Agentic Systems Roadmap: From Efficiency to Action**
 
-### Making Requests
+This course follows a structured path from building performant AI systems to ensuring they act safely and effectively in production.
 
-Run the `query_MCP_ADK_A2A.py` script to query the multi-agent system:
+---
+
+### Part 1: Deployment & Efficiency
+
+**Building the Performance & Memory Engine**
+
+Focus on Quantization and KV Caching to define what is actually deployable in the real world.
+
+#### Key Topics:
+- LLM Deployment and Hosting
+- Quantization methods (4-bit, 8-bit)
+- KV Caching optimization
+- Speculative Decoding
+- Mixture of Experts
+
+#### Notebooks:
+
+TextSTreamer: [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/hamzafarooq/multi-agent-course/blob/main/Module_2/Quantization/TextStreamer_Meta_Llama_3_1_8B_Instruct.ipynb)
+
+Bitsnbytes Quantization: [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/hamzafarooq/multi-agent-course/blob/main/Module_2/Quantization/Bitsnbytes_4bit_Quantization.ipynb)
+
+---
+
+### Part 2: Retrieval & Memory
+
+**Hybrid Memory Models**
+
+Integrates RAG for unstructured data and Knowledge Graphs for structured, symbolic reasoning.
+
+#### Key Topics:
+- Naive RAG vs Agentic RAG
+- Agentic RAG Components
+- Semantic Cache implementation
+- Knowledge Graphs for structured reasoning
+- GraphRAG at scale
+- Text-to-Cypher conversion with LLMs
+- RAG vs Knowledge Graph Evaluation
+
+#### Notebooks:
+
+Upload Data to Qdrant: [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/hamzafarooq/multi-agent-course/blob/main/Module_1/Agentic_RAG/Upload_data_to_Qdrant_Notebook.ipynb)
+
+Agentic RAG: [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/hamzafarooq/multi-agent-course/blob/main/Module_1/Agentic_RAG/Agentic_RAG_Notebook.ipynb)
+
+Semantic Cache: [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/hamzafarooq/multi-agent-course/blob/main/Module_3/Semantic_Cache/Semantic_cache_from_scratch.ipynb)
+
+Knowledge Graphs Basic Version: [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/hamzafarooq/multi-agent-course/blob/main/Module_4/Knowledge_Graphs/Knowledge_Graphs_Basic_Version.ipynb)
+
+Knowledge Graphs Advanced Version: [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/hamzafarooq/multi-agent-course/blob/main/Module_4/Knowledge_Graphs/Knowledge_Graphs_Advanced_Version.ipynb)
+
+**📊 Featured Project: RAG vs Knowledge Graph Comparison Framework**
+
+A production-ready Streamlit application that objectively compares RAG and Knowledge Graph approaches using LLM-based evaluation. Includes interactive graph visualizations showing the exact data path used for each answer.
+
+[View Full Documentation →](Module_4_Knowledge_Graphs/)
+
+**Interactive Demo:**
 
 ```bash
-python ./clients/query_MCP_ADK_A2A.py
+cd Module_4_Knowledge_Graphs
+python setup.py  # One-time setup
+streamlit run app.py
 ```
 
-This will use the `a2a_client.py` module to make requests to the pipeline:
+---
 
+### Part 3: Acting & Control
 
-## Core Files
+**Intelligence Becomes Action**
 
-- `a2a_client.py`: Client for A2A communication
-- `a2a_servers.py`: Server implementations for A2A protocol
-- `query_MCP_ADK_A2A.py`: Main pipeline implementation
-- `run_servers.py`: Server startup and coordination
-- `server_mcp.py`: MCP server implementation
-- `task_manager.py`: Task coordination for agent communication
-- `mcp_agent.py`: Integration between ADK and MCP
+Uses ReAct loops and Guardrails to ensure agents reason, act, and coordinate safely.
 
-## MCP Integration
+#### Key Topics:
+- Building LLM Agents from scratch
+- ReAct (Reasoning + Acting) patterns
+- Multi-Agent Orchestration with ADK & MCP
+- AI Agent Frameworks (smolagents, AutoGen, CrewAI)
+- Production Guardrails (Llama Guard)
+- Safety and control mechanisms
 
-The system integrates with Model Context Protocol (MCP) for enhanced SQL capabilities:
+#### Notebooks:
 
-```python
-# Connect to MCP server
-tools, exit_stack = await MCPToolset.from_server(
-    connection_params=StdioServerParameters(
-        command='python',
-        args=["server_mcp.py"],
-    )
-)
+AgentPro Starter Code: [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/hamzafarooq/multi-agent-course/blob/main/Module_5/Agents/AgentPro%20Starter%20Code.ipynb)
 
-# Create ADK agent with MCP tools
-agent = LlmAgent(
-    model='gemini-2.5-pro',
-    name='sql_assistant',
-    instruction="...",
-    tools=tools,
-)
-```
+Agent Pro from Scratch [old version]: [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/hamzafarooq/multi-agent-course/blob/main/Module_5/Agents/Agent%20Pro%20from%20Scratch%20%5Bold%20version%5D.ipynb)
 
-## Security Features
+Agent Pro ReAct: [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/hamzafarooq/multi-agent-course/blob/main/Module_5/Agents/Agent%20Pro%20ReAct.ipynb)
 
-- Pattern-based security threat detection
-- PII identification and masking (emails, names, addresses, etc.)
-- Input sanitation with whitelist approach
-- Model Armor API integration for additional protection
+Smol Agents: [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/hamzafarooq/multi-agent-course/blob/main/Module_5/Agents/Smol%20Agents.ipynb)
 
+ADK A2A MCP: [![GitHub Folder](https://img.shields.io/badge/View%20on-GitHub-blue?logo=github)](https://github.com/hamzafarooq/multi-agent-course/tree/main/Module_6/A2A%20ADK%20MCP)
 
-## Deployment
+MCP (non-adk): [![GitHub Folder](https://img.shields.io/badge/View%20on-GitHub-blue?logo=github)](https://github.com/hamzafarooq/multi-agent-course/tree/main/Module_6/MCP%20(non-adk))
 
-Testing:
+Llama Guard: [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/hamzafarooq/multi-agent-course/blob/main/Module_6/Guardrails/Llama%20Guard.ipynb)
 
-```
-docker build -t adk-multi-agent .
-docker run -p 8000:8000 -e GOOGLE_API_KEY=your_api_key adk-multi-agent adk web
-```
+---
 
-Production:
+### Part 4: Evals as Engineering Discipline
 
-```
-export GOOGLE_CLOUD_PROJECT=next-project25
-export GOOGLE_CLOUD_LOCATION=us-central1
-export GOOGLE_GENAI_USE_VERTEXAI=True
-export AGENT_PATH="."
-export SERVICE_NAME="adk-agent-service"
-export APP_NAME="agents"
-```
+**Closing the Loop**
 
-```
-adk deploy cloud_run \
---project=$GOOGLE_CLOUD_PROJECT \
---region=$GOOGLE_CLOUD_LOCATION \
---service_name=$SERVICE_NAME \
---app_name=$APP_NAME \
---with_ui \
-$AGENT_PATH
-```
+Validates the entire stack by measuring and optimizing efficiency, reasoning quality, and safety.
 
+#### Key Topics:
+- LLM-based evaluation frameworks
+- RAG vs Knowledge Graph comparison methodologies
+- Safety evaluation and jailbreak testing
+- Production monitoring and validation
+- Performance benchmarking
 
-## Documentation
+#### Notebooks:
 
-[Agent Development Kit Documentation](https://google.github.io/adk-docs/)
+Ollama jailbreak: [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/hamzafarooq/multi-agent-course/blob/main/Module_6/Ollama/Mistral%20Llama%203.1%20and%20Llama%203.2%20jailbreak.ipynb)
 
-[A2A Protocol Documentation](https://google.github.io/A2A/#/documentation)
+---
 
-[MCP Server Documentation](https://modelcontextprotocol.io/introduction)
+## Technology Stack
 
+This course uses the following tools and services:
 
-## Contributing
+| Area                  | Tools / Frameworks                                   |
+|-----------------------|------------------------------------------------------|
+| **LLM Access**        | Ares API (via Traversaal.ai), OpenAI GPT-4o-mini     |
+| **Agent Frameworks**  | ADK, A2A, CrewAI                                     |
+| **Vector Search**     | FAISS (Colab), OpenSearch (optional)                 |
+| **Graph Databases**   | Neo4j Aura, NetworkX                                 |
+| **Memory & Caching**  | Redis Cloud (recommended setup)                      |
+| **Web Interfaces**    | Streamlit, FastAPI                                   |
+| **Visualizations**    | Pyvis, Plotly, Interactive Graph Rendering           |
+| **Notebooks**         | Google Colab Pro (preferred), Jupyter (optional)     |
+| **Deployments (Optional)** | AWS Lambda, Step Functions, FastAPI             |
+| **Language**          | Python 3.10+                                         |
 
-1. Fork the repository
-2. Create a feature branch
-3. Submit a pull request with comprehensive description
+> You don't need to pre-install anything locally.
+> All key dependencies are included in each notebook.
+g
+---
 
+## What You'll Build
 
-*This project demonstrates integration between A2A protocol and MCP server capabilities, creating a secure and flexible agent architecture for data processing.*
+This course goes beyond theory. You'll build production-ready systems across four key phases:
+
+### Phase 1 & 2: Building the Performance & Memory Engine
+- **Optimized LLM Deployments** with quantization and KV caching
+- **Agentic RAG Systems** with advanced retrieval and semantic caching
+- **Knowledge Graph Applications** with RAG vs KG evaluation framework
+- **Hybrid Memory Models** combining structured and unstructured data
+
+### Phase 3 & 4: From Intelligence to Validated Action
+- **ReAct Agent Systems** that reason and act autonomously
+- **Multi-Agent Workflows** with ADK, A2A, and CrewAI orchestration
+- **Production Guardrails** for safe AI deployment (Llama Guard)
+- **LLM-based Evaluators** for comprehensive system validation
+- **Interactive Dashboards** using Streamlit for real-time demos
+
+Each module includes hands-on projects you can showcase in your portfolio.
+
+---
+
+## Student Feedback (Beta Cohort)
+
+> "Finally a course that moves past theory and teaches **how to build AI systems that work**."
+> "Everything was practical — I now know how to apply RAG and agents in real products."
+
+---
+
+## Ready to Master Multi-Agent Systems?
+
+<a href="https://maven.com/boring-bot/advanced-llm?promoCode=200OFF">
+  <img src="Module_4_Knowledge_Graphs/course_img.png" alt="Agent Engineering Bootcamp" width="600">
+</a>
+
+### Agent Engineering Bootcamp: Developers Edition
+
+**Rating:** ⭐⭐⭐⭐⭐ 4.8/5 (96 reviews)
+
+**Your Instructor:** Hamza Farooq
+*Founder | Ex-Google | Professor at UCLA & UMN*
+
+**What You'll Learn:**
+- ⚡ Optimize LLM deployment with quantization, KV caching, and speculative decoding
+- 🧠 Build hybrid memory systems combining RAG and Knowledge Graphs
+- 🤖 Create ReAct agents with multi-agent orchestration (ADK, MCP)
+- 🛡️ Implement production guardrails and safety mechanisms
+- 📊 Master evaluation frameworks that validate efficiency, reasoning, and safety
+- 💼 Deploy production-ready AI systems with modern tooling
+
+**Course Highlights:**
+- 4-part structured curriculum: From Efficiency to Action
+- 6 weeks of intensive, hands-on learning
+- Live sessions with industry expert (Ex-Google, UCLA & UMN Professor)
+- Production-ready code and templates for every phase
+- Real-world case studies and architectures
+- Certificate of completion
+
+### [🎓 Enroll Now - Save $200 with code 200OFF →](https://maven.com/boring-bot/advanced-llm?promoCode=200OFF)
+
+---
+
+## Let's Build AI Systems That Survive the Real World
+
+This repository is for enrolled students only and contains all code, exercises, and project materials.
+
+**Your instructor**: [Hamza Farooq](https://www.linkedin.com/in/hamzafarooq/)
+**Created by** [boring-bot](https://maven.com/boring-bot)
+
+*Building the future of AI, one agent at a time.*
