@@ -10,3 +10,4 @@ langchain-google-genai==2.0.10
 langchain-community==0.3.18
 mcp==1.6.0
 loguru
+deprecated

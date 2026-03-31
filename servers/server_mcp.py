@@ -58,11 +58,11 @@ def setup_database(authenticator: DatabaseAuthenticator) -> SQLDatabase:
         raise ValueError("Invalid credentials!")
 
     # Load dataset and create database
-    df = pd.read_csv("/home/neo/Downloads/CODE_other_models/NEXT25/Updated_Salaries_Data.csv")
-    connection = sqlite3.connect("salaries.db")
-    df.to_sql(name="salaries", con=connection, if_exists='replace', index=False)
+    df = pd.read_csv("/Users/traversaal-001-hf/Dropbox/Mac (3)/Documents/Github/a2a/A2A_ADK_MCP/data/Walmart-Sales.csv")
+    connection = sqlite3.connect("sales.db")
+    df.to_sql(name="sales", con=connection, if_exists='replace', index=False)
 
-    return SQLDatabase.from_uri("sqlite:///salaries.db")
+    return SQLDatabase.from_uri("sqlite:///sales.db")
 
 # Initialize database with sample credentials
 sample_credentials = {
@@ -128,7 +128,7 @@ def list_database_tables() -> str:
 def query_data(sql: str) -> str:
     """Execute SQL queries safely on the salaries database."""
     logger.info(f"Executing SQL query: {sql}")
-    conn = sqlite3.connect("salaries.db")
+    conn = sqlite3.connect("sales.db")
     try:
         cursor = conn.cursor()
         cursor.execute(sql)

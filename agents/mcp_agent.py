@@ -48,7 +48,7 @@ async def get_agent_async():
 
         # Create the agent with MCP tools
         root_agent = LlmAgent(
-            model='gemini-2.5-pro-preview-03-25',  # Match your model from query_MCP_ADK_A2A.py
+            model='gemini-2.0-flash',  # Match your model from query_MCP_ADK_A2A.py
             name='sql_analysis_assistant',
             instruction="""
             You are an expert SQL analyst working with a salary database.

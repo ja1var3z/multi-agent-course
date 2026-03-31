@@ -110,7 +110,7 @@ tools, exit_stack = await MCPToolset.from_server(
 
 # Create ADK agent with MCP tools
 agent = LlmAgent(
-    model='gemini-2.5-pro-preview-03-25',
+    model='gemini-2.5-pro',
     name='sql_assistant',
     instruction="...",
     tools=tools,

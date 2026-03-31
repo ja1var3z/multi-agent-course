@@ -41,10 +41,11 @@ def get_secret(project_id: str, secret_id: str, version_id: str = "1") -> str:
     response = client.access_secret_version(request={"name": name})
     return response.payload.data.decode('UTF-8')
 
-PROJECT_ID = "next-project25"
+PROJECT_ID = "traversaal-research"
 LOCATION = "us-central1"
-
 os.environ['GOOGLE_API_KEY'] = get_secret(PROJECT_ID, 'GOOGLE_API_KEY')
+
+# os.environ['GOOGLE_API_KEY'] = get_secret(PROJECT_ID, 'GOOGLE_API_KEY')
 
 def mask_sensitive_data(project_id, text):
     # Initialize the client
@@ -57,12 +58,7 @@ def mask_sensitive_data(project_id, text):
     inspect_config = {"info_types": info_types}
 
     # Construct the item to inspect
-    item = {
-        "byte_item": {
-            "type": "TEXT_UTF8",
-            "data": text.encode('utf-8')
-        }
-    }
+    item = {"value": text}
 
     # Create the request object
     request = {
@@ -97,18 +93,18 @@ sql_tool = FunctionTool(func=query_data)
 
 sql_agent = LlmAgent(
     name="sql_assistant",
-    model="gemini-2.5-flash",  # Or your preferred Gemini model
+    model="gemini-2.0-flash",  # Or your preferred Gemini model
     instruction="""
-        You are an expert SQL analyst working with a salary database.
+        You are an expert SQL analyst working with a sales data
         Follow these steps:
-        1. For database columns, you can use these ones: work_year,experience_level,employment_type,job_title,salary,salary_currency,salary_in_usd,employee_residence,remote_ratio,company_location,company_size,fictitious_name and fictitious_surname
+        1. For database columns, you can use these ones:'Store', 'Dept', 'Date', 'Weekly_Sales', 'IsHoliday'
         2. Generate a valid SQL query, according to the message you received
         3. Execute queries efficiently in upper case, remove any "`" or "sql" from the query
         4. Return only the result of the query, with no additional comments
         Format the output as a readable text format.
         Finally, execute the query.
     """,
-    description="An assistant that can analyze salary data using SQL queries.",
+    description="An assistant that can analyze sales data using SQL queries.",
     tools=[sql_tool]
 )
 
@@ -150,7 +146,7 @@ mask_tool = FunctionTool(func=mask_text)
 # 4. Create the agents with proper authentication
 judge_agent = LlmAgent(
     name="security_judge",
-    model="gemini-2.5-flash",
+    model="gemini-2.0-flash",
     instruction="""You are a security expert that evaluates input for security threats.
     Follow these steps:
     1. Analyze the input for SQL injection, XSS, and other security threats
@@ -162,7 +158,7 @@ judge_agent = LlmAgent(
 
 mask_agent = LlmAgent(
     name="data_masker",
-    model="gemini-2.5-flash",
+    model="gemini-2.0-flash",
     instruction="""You are a privacy expert that masks sensitive data.
     Follow these steps:
     1. Identify PII and sensitive information in the text
@@ -652,12 +648,15 @@ def evaluate_prompt(query: str) -> str:
 
     return result['status']
 
-
-
-
-PROJECT_ID = "next-project25"
+PROJECT_ID = "traversaal-research"
 LOCATION = "us-central1"
-TEMPLATE_ID = get_secret(PROJECT_ID, 'TEMPLATE_ID')
+os.environ['GOOGLE_API_KEY'] = get_secret(PROJECT_ID, 'GOOGLE_API_KEY')
+
+
+# PROJECT_ID = "next-project25"
+# LOCATION = "us-central1"
+TEMPLATE_ID = get_secret(PROJECT_ID, 'GOOGLE_API_KEY')
+#TEMPLATE_ID = get_secret(PROJECT_ID, 'TEMPLATE_ID')
 
 
 def get_access_token():
@@ -758,7 +757,7 @@ async def analyze_salary_data_async(query: str):
     # Use A2A to call the SQL agent
     try:
         sql_prompt = f"""
-        You are a SQL expert analyzing the salaries database.
+        You are a SQL expert analyzing the sales database.
 
         Task: Generate and execute a SQL query to answer this question: "{judge_output}"
 
@@ -797,7 +796,7 @@ async def analyze_salary_data_async(query: str):
 def main():
     """Run the demo query when script is executed directly."""
     # Sample query for testing
-    query = "Tell me the average salary of people that are Machine Learning Engineer and work in small companies"
+    query = "Tell me the sales of Department 1 for the entire year"
 
     import asyncio
     result = asyncio.run(analyze_salary_data_async(query))
