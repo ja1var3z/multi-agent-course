@@ -23,6 +23,23 @@ agents/.env
 google-cloud-sdk/
 google-cloud-cli-*.tar.gz
 
+# Virtual environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Claude
+.claude
+
 # Node
 package-lock.json
 node_modules/
