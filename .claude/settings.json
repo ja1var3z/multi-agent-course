@@ -1,0 +1,15 @@
+{
+  "$comment": "Optional Claude Code project settings. Safe defaults for a teaching kit. Adjust as needed; this file is ignored when used on Claude.ai web.",
+  "permissions": {
+    "$comment": "Tutoring only needs to read course files and update the progress file.",
+    "allow": [
+      "Read(./**)",
+      "Edit(./progress/**)",
+      "Write(./progress/**)"
+    ],
+    "ask": [
+      "Edit(./**)",
+      "Write(./**)"
+    ]
+  }
+}
