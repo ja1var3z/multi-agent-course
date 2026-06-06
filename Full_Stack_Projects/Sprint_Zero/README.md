@@ -1,15 +1,37 @@
-# Sprint Zero
+<div align="center">
 
-> **Part of the [Enterprise RAG & Multi-Agent Applications](../../README.md) course** — a full-stack, multi-agent capstone project.
-> Built by **[Yousuf Alvi](https://github.com/yousuf-alvi)** and **[Hamza Farooq](https://www.linkedin.com/in/hamzafarooq/)**.
+# 🚀 Sprint Zero
 
-**Point it at a product. Answer three questions. Get back a complete spec set and a working app.**
+### Point it at a product. Answer three questions. Get back a complete spec set and a working app.
 
-Sprint Zero is a Claude Code kit that gives a PM or founder a full sub-agent product team on their laptop. You bring the idea and a reference URL. Sprint Zero handles scoping, research, specs, parallel engineering, and QA — and hands back a running product.
+[![Built with Claude](https://img.shields.io/badge/Built%20with-Claude%20Code-D97757?style=for-the-badge&logo=anthropic&logoColor=white)](https://claude.com/claude-code)
+&nbsp;
+![Zero setup](https://img.shields.io/badge/Default-Zero%20setup-2EA043?style=for-the-badge)
+&nbsp;
+![Time](https://img.shields.io/badge/MVP-~10–20%20min-6E40C9?style=for-the-badge)
+&nbsp;
+![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
+
+**Capstone of [Module 2 — Skills, Subagents & Orchestration](../../README.md)** in the Agent Engineering Bootcamp.
+Built by **[Yousuf Alvi](https://github.com/yousuf-alvi)** · **[Hamza Farooq](https://www.linkedin.com/in/hamzafarooq/)**
+
+[**Quick start**](#-quick-start) · [**How it flows**](#how-it-flows) · [**The agent team**](#the-agent-team) · [**Build options**](#build-configuration) · [**Demo mode**](#sprint-zero----present-mode)
+
+</div>
 
 ---
 
-## The problem
+```
+        ┌─ 📋 spec set ─┐        ┌─ ⚙️ backend ─┐
+/sprint-zero <url>  ──▶  scoping ──▶  research ──▶  PRD/contract  ──▶  ┤             ├──▶  ✅ QA  ──▶  🟢 running app
+                                                                       └─ 🎨 frontend ┘
+```
+
+Sprint Zero is a Claude Code kit that gives a PM or founder a full sub-agent product team on their laptop. You bring the idea and a reference URL. Sprint Zero handles scoping, research, specs, parallel engineering, and QA — and hands back a running product. The default build runs **straight after clone with no account, no keys, and no `.env`.**
+
+---
+
+## 🧩 The problem
 
 Validating a product idea today looks something like this:
 
@@ -29,11 +51,13 @@ Sprint Zero collapses that cycle into one terminal session. The PM stays in the 
 
 One command. One reference URL. Three scoping answers. You get:
 
-- A full spec set in `docs/` — scope, research brief, PRD, decisions, user stories, API contract
-- A working build in the stack you pick at scoping time — by default a React frontend on an Express API with data and auth stored locally in SQLite, so it runs immediately with no account or keys
-- QA calibrated to what you built — a Playwright-driven auth dance and core loop for web apps, API tests for services, command runs for CLIs
+| | What lands |
+|---|---|
+| 📋 **A full spec set** | `docs/` — scope, research brief, PRD, decisions, user stories, API contract |
+| 🛠️ **A working build** | In the stack you pick — default is a React UI on an Express API with data + auth in local SQLite, so it runs immediately with no account or keys |
+| ✅ **QA that matches the build** | Playwright auth dance + core loop for web apps · API tests for services · command runs for CLIs |
 
-For a `MVP` scope, expect ten to twenty minutes end-to-end.
+⏱️ For an `MVP` scope, expect **ten to twenty minutes** end-to-end.
 
 ---
 
@@ -59,7 +83,7 @@ One command drives the whole flow. You watch it happen in the Claude Code termin
 
 ---
 
-## The three scope levels
+## 🎚️ The three scope levels
 
 You pick one when you answer the scoping question. The level is stored in `docs/scope.md` and calibrates every agent downstream.
 
@@ -122,7 +146,7 @@ Claude Code does not permit sub-agents to spawn other sub-agents. `tech-lead` co
 
 ---
 
-## The spec pipeline
+## 📋 The spec pipeline
 
 Before any code runs, Sprint Zero writes six documents to `docs/`. Each feeds the next.
 
@@ -151,7 +175,7 @@ The pipeline is resumable. Each step checks whether its output file already exis
 
 ---
 
-## The API contract is law
+## 📜 The API contract is law
 
 ```mermaid
 flowchart TD
@@ -165,7 +189,7 @@ Endpoint paths, request shapes, response shapes, status codes — all defined in
 
 ---
 
-## The stack
+## 🧰 The stack
 
 Pick a stack profile at scoping time, or take the default. Each profile is a small, opinionated set of well-trodden technologies — the kit stays shippable by having a fixed catalog, not by locking you to one option. Full details in [.claude/stacks.md](.claude/stacks.md).
 
@@ -179,7 +203,9 @@ Data and auth come from the **data layer**: `local` (SQLite + a self-issued JWT 
 
 ---
 
-## Quick start
+## 🚀 Quick start
+
+> **TL;DR (default, zero-setup):** `git clone https://github.com/yousuf-labs/sprint-zero && cd sprint-zero && claude` → then `/sprint-zero https://twenty.com`. No account, no keys.
 
 ### 1. Prerequisites
 
@@ -397,7 +423,7 @@ cd presenter && npm install && npm run build && npm start
 
 ---
 
-## Troubleshooting
+## 🩺 Troubleshooting
 
 **The page shows "Failed to load data" (or similar).** Tables aren't created yet. Re-run the seed command for your build (e.g. `cd server && node seed.js`).
 
@@ -438,11 +464,11 @@ See [plan.md](plan.md) for the full roadmap.
 
 ---
 
-## Authors
+## 👥 Authors
 
 - **[Yousuf Alvi](https://github.com/yousuf-alvi)** · [LinkedIn](https://www.linkedin.com/in/yousufalvi/) — original author
-- **[Hamza Farooq](https://www.linkedin.com/in/hamzafarooq/)** — course integration ([Enterprise RAG & Multi-Agent Applications](https://maven.com/boring-bot/advanced-llm))
+- **[Hamza Farooq](https://www.linkedin.com/in/hamzafarooq/)** — course integration ([Agent Engineering Bootcamp](https://maven.com/boring-bot/advanced-llm))
 
-Originally published at [yousuf-labs/sprint-zero](https://github.com/yousuf-labs/sprint-zero).
+Originally published at [yousuf-labs/sprint-zero](https://github.com/yousuf-labs/sprint-zero). MIT licensed — see [LICENSE](LICENSE).
 
-MIT licensed. See [LICENSE](LICENSE).
+<div align="center"><sub>Part of the <a href="../../README.md">Agent Engineering Bootcamp</a> · Module 2 capstone</sub></div>
