@@ -92,25 +92,29 @@ Files generated at runtime (per user run):
 
 ## Agent topology
 
-Sprint Zero's build layer has four sub-agents. One orchestrator, two engineers, one QA. The user talks to the orchestrator. The orchestrator handles everything else. Which engineers run depends on the project type — `frontend-engineer` is spawned only for `web-app`.
+Sprint Zero's build layer has one briefing sub-agent (tech-lead) and three worker sub-agents (two engineers, one QA). **The main Claude Code session is the orchestrator — it is the only thing that spawns sub-agents.** tech-lead does not spawn anyone; it reads specs and hands a build brief back to the main session, which then spawns the workers. This is a hard Claude Code constraint, not a stylistic choice: a sub-agent cannot spawn another sub-agent (the `Task` tool is stripped from nested contexts), and tech-lead is declared with `tools: Read` only. See "Build orchestration pattern" below for the full rationale.
 
 ```
-User
+You
   │
-  └─ tech-lead ──┬─ backend-engineer   (API or CLI, per stack profile + data layer)
-                 ├─ frontend-engineer  (web-app only; React/Vite or Next.js pages)
-                 │
-                 └─ qa-engineer        (browser / API / CLI, per project type)
+  └─ main session  (the orchestrator — the only thing that spawns)
+        │
+        ├─ 1. invoke tech-lead ........ reads specs → returns a build brief
+        │                               (tools: Read only — no code, no spawning)
+        │
+        ├─ 2. spawn IN PARALLEL ......  backend-engineer   (API or CLI, per stack profile + data layer)
+        │                              frontend-engineer  (web-app only; React/Vite or Next.js pages)
+        │
+        └─ 3. after both finish ......  qa-engineer        (browser / API / CLI, per project type)
 ```
 
-### tech-lead
+Which engineers run depends on the project type — `frontend-engineer` is spawned only for `web-app`.
+
+### tech-lead (briefing only — does not spawn)
 
 - Reads `docs/scope.md` (scope level + build config), `docs/prd.md`, `docs/api-contract.md`, `docs/decisions.md`, and resolves the config against `.claude/stacks.md`
-- Briefs the user on what it understood, including the resolved dirs/ports and which engineers to spawn
-- For `web-app`: spawns `backend-engineer` and `frontend-engineer`; for `api-service`/`cli-tool`: backend only
-- Waits for the engineers, then spawns `qa-engineer`
-- Returns a delivery summary
-- Does not write application code
+- Returns a build brief: what it understood, the resolved dirs/ports, and a **recommended** execution order (which engineers the main session should spawn, and in what order)
+- Does **not** spawn engineers or QA, and does not write application code — `tools: Read` only. The main session acts on the recommendation.
 
 ### backend-engineer
 
@@ -131,7 +135,7 @@ User
 - `web-app`: the full auth dance (signup, session, logout, login, protected route, 401) + core loop in a real browser via Playwright
 - `api-service`: contract + HTTP integration tests, auth verified at the API level (no browser)
 - `cli-tool`: runs the CLI with sample args and asserts on stdout/exit codes
-- At `Prod` scope, adds one error-path test per loop. Reports pass/fail back to `tech-lead`
+- At `Prod` scope, adds one error-path test per loop. Reports pass/fail back to the main session, which writes the delivery summary
 
 ---
 
