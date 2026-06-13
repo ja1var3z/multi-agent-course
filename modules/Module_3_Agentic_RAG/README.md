@@ -4,6 +4,10 @@ This module teaches you how to build intelligent Retrieval-Augmented Generation 
 
 By the end of this module you will have built a full agentic RAG pipeline from scratch, without relying on any external agentic framework.
 
+> **🗺️ Start here:** open [`module-3-mindmap.html`](module-3-mindmap.html) for a one-glance map of everything in this module.
+>
+> **✦ Latest addition — [`Moment_RAG/`](Moment_RAG/):** agentic RAG on *video*. Ask a complex question and get a streamed, cited answer where each citation pops up the source YouTube episode at the **exact moment**, with a synced transcript. It's decompose → hybrid retrieve (dense + BM25 + HyDE questions, RRF) → cross-encoder re-rank → cited synthesis. See the [Moment RAG README](Moment_RAG/README.md).
+
 ---
 
 ## What You'll Learn
