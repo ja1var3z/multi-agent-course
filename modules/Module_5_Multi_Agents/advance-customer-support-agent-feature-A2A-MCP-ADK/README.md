@@ -43,6 +43,13 @@ MEM0_API_KEY=<your Mem0 key>                 # mem0.ai
 
 ## 3 — Python Dependencies
 
+Create an isolated conda environment (Python 3.12, matching the prerequisite) and install into it:
+
+```bash
+conda create -y -n customer-support python=3.12
+conda activate customer-support
+```
+
 ```bash
 pip install -r requirements.txt
 
