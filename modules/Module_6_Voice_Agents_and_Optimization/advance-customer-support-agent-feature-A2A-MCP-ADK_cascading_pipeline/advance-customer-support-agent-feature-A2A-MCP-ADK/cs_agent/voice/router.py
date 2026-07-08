@@ -16,7 +16,9 @@ Protocol (see ui.js for the client side):
   server -> client   {"type":"partial_transcript","text":...}   combined query so far
   server -> client   {"type":"processing"}     combined query sent to the agent
   server -> client   {"type":"tool_call"|"response_text"|"blocked"|"timing"
-                      |"turn_end"|"error", ...}
+                      |"cost"|"turn_end"|"error", ...}
+                      timing.stages includes "total" (whole-response wall clock);
+                      cost = {"total": usd, "stages": {stage: {in,out,usd,measured}}}
   server -> client   binary frame              TTS audio chunk, 16-bit PCM mono @24kHz
 """
 
@@ -34,6 +36,7 @@ from google.adk.agents.run_config import RunConfig, StreamingMode
 from cs_agent.security.sanitizer import sanitize_input
 from cs_agent.voice.stt import transcribe
 from cs_agent.voice.tts import synthesize_stream
+from cs_agent.voice import cost
 
 
 def _flag(name: str, default: str) -> bool:
@@ -102,6 +105,8 @@ def make_voice_router(*, runners, session_service, judge, mask) -> APIRouter:
             return
 
         pending = ""                       # accumulated, not-yet-answered transcript
+        stt_acc = {"in": 0, "out": 0}      # STT tokens for the bursts in `pending`
+        stt_time = {"sec": 0.0}            # STT wall time summed over those bursts
         agent_task: asyncio.Task | None = None
         settle_task: asyncio.Task | None = None
         stt_lock = asyncio.Lock()          # serialize STT so bursts append in order
@@ -113,12 +118,37 @@ def make_voice_router(*, runners, session_service, judge, mask) -> APIRouter:
         async def run_agent(text: str):
             nonlocal pending
             timing: dict[str, float] = {}
+            # per-stage token counts for costing (stt already accrued in stt_acc)
+            agent_tok = {"in": 0, "out": 0}
+            judge_tok = {"in": 0, "out": 0}
+            mask_tok = {"in": 0, "out": 0}
+            tts_tok = {"in": 0, "out": 0}
 
             def clock(stage, t0):
                 timing[stage] = round(time.perf_counter() - t0, 2)
 
+            async def send_cost():
+                # Roll the per-stage tokens up into dollars. STT/agent/TTS are MEASURED
+                # (real usage_metadata); Judge/Masker are ESTIMATED from text length,
+                # since they run as separate A2A services that don't report tokens.
+                all_stages = {
+                    "stt":   {**stt_acc,   "usd": cost.usd("stt", stt_acc["in"], stt_acc["out"]), "measured": True},
+                    "judge": {**judge_tok, "usd": cost.usd("llm", judge_tok["in"], judge_tok["out"]), "measured": False},
+                    "agent": {**agent_tok, "usd": cost.usd("llm", agent_tok["in"], agent_tok["out"]), "measured": True},
+                    "mask":  {**mask_tok,  "usd": cost.usd("llm", mask_tok["in"], mask_tok["out"]), "measured": False},
+                    "tts":   {**tts_tok,   "usd": cost.usd("tts", tts_tok["in"], tts_tok["out"]), "measured": True},
+                }
+                # Only report stages that actually ran (e.g. the Masker is skipped in
+                # streaming mode) — a $0.00000 line for a stage that never fired is noise.
+                stages = {k: v for k, v in all_stages.items() if v["in"] or v["out"]}
+                total = round(sum(s["usd"] for s in stages.values()), 6)
+                for s in stages.values():
+                    s["usd"] = round(s["usd"], 6)
+                await send_json({"type": "cost", "total": total, "stages": stages})
+
             try:
                 await send_json({"type": "processing"})
+                turn_t0 = time.perf_counter()   # whole-response wall clock
 
                 # [1] local sanitizer
                 try:
@@ -128,6 +158,8 @@ def make_voice_router(*, runners, session_service, judge, mask) -> APIRouter:
                                      "response": f"Input rejected by sanitizer: {exc}"})
                     await send_json({"type": "turn_end"})
                     pending = ""
+                    stt_acc["in"] = stt_acc["out"] = 0
+                    stt_time["sec"] = 0.0
                     return
 
                 # [2] A2A Security Judge
@@ -137,8 +169,14 @@ def make_voice_router(*, runners, session_service, judge, mask) -> APIRouter:
                                      "response": "Blocked by the A2A Security Judge."})
                     await send_json({"type": "turn_end"})
                     pending = ""
+                    stt_acc["in"] = stt_acc["out"] = 0
+                    stt_time["sec"] = 0.0
                     return
                 clock("judge", t)
+                # Judge is a remote A2A LLM call; estimate its tokens from the text
+                # it saw in (the query) and out (a short verdict).
+                judge_tok["in"] = cost.estimate_tokens(clean)
+                judge_tok["out"] = 4
 
                 runner = runners[user_id]
                 content = types.Content(role="user", parts=[types.Part(text=clean)])
@@ -162,7 +200,7 @@ def make_voice_router(*, runners, session_service, judge, mask) -> APIRouter:
                     async def speak_segment(segment: str):
                         nonlocal first_audio, display, pending
                         audio = bytearray()
-                        async for chunk in synthesize_stream(segment):
+                        async for chunk in synthesize_stream(segment, usage_out=tts_tok):
                             audio.extend(chunk)
                         if not audio:
                             return
@@ -182,10 +220,27 @@ def make_voice_router(*, runners, session_service, judge, mask) -> APIRouter:
                     async for event in runner.run_async(
                             user_id=user_id, session_id=f"session_{user_id}",
                             new_message=content, run_config=run_config):
-                        for fc in (event.get_function_calls() or []):
-                            call = {"name": fc.name, "args": dict(fc.args or {})}
-                            tool_calls.append(call)
-                            await send_json({"type": "tool_call", **call})
+                        # count tokens on each finished LLM call (skip streaming partials,
+                        # whose usage is cumulative and would double-count)
+                        um = getattr(event, "usage_metadata", None)
+                        if um and not getattr(event, "partial", False):
+                            ti, to = cost.usage_tokens(um)
+                            agent_tok["in"] += ti
+                            agent_tok["out"] += to
+                        # SSE surfaces the SAME function call on both the partial and
+                        # the final event — only read tool calls/results on non-partial
+                        # events so they aren't double-counted.
+                        if not getattr(event, "partial", False):
+                            for fc in (event.get_function_calls() or []):
+                                call = {"name": fc.name, "args": dict(fc.args or {}), "result": None}
+                                tool_calls.append(call)
+                                await send_json({"type": "tool_call", "name": fc.name, "args": call["args"]})
+                            for fr in (event.get_function_responses() or []):
+                                rs = json.dumps(fr.response) if isinstance(fr.response, dict) else str(fr.response)
+                                for tc in reversed(tool_calls):
+                                    if tc["name"] == fr.name and tc["result"] is None:
+                                        tc["result"] = rs[:800]
+                                        break
                         txt = None
                         if event.content and event.content.parts and event.content.parts[0].text:
                             txt = event.content.parts[0].text
@@ -212,6 +267,11 @@ def make_voice_router(*, runners, session_service, judge, mask) -> APIRouter:
                     tool_calls, final_text = [], ""
                     async for event in runner.run_async(
                             user_id=user_id, session_id=f"session_{user_id}", new_message=content):
+                        um = getattr(event, "usage_metadata", None)
+                        if um:                       # one per LLM call in the tool loop
+                            ti, to = cost.usage_tokens(um)
+                            agent_tok["in"] += ti
+                            agent_tok["out"] += to
                         for fc in (event.get_function_calls() or []):
                             call = {"name": fc.name, "args": dict(fc.args or {})}
                             tool_calls.append(call)
@@ -222,12 +282,16 @@ def make_voice_router(*, runners, session_service, judge, mask) -> APIRouter:
 
                     if MASK_ENABLED:
                         t = time.perf_counter()
+                        pre_mask = final_text
                         final_text = await mask(final_text)
                         clock("mask", t)
+                        # remote A2A call: estimate tokens from text in/out
+                        mask_tok["in"] = cost.estimate_tokens(pre_mask)
+                        mask_tok["out"] = cost.estimate_tokens(final_text)
 
                     t = time.perf_counter()
                     text_sent = False
-                    async for chunk in synthesize_stream(final_text):
+                    async for chunk in synthesize_stream(final_text, usage_out=tts_tok):
                         if not text_sent:
                             timing["first_audio"] = round(time.perf_counter() - t, 2)
                             await send_json({"type": "response_text", "text": final_text,
@@ -242,17 +306,29 @@ def make_voice_router(*, runners, session_service, judge, mask) -> APIRouter:
                                          "tool_calls": tool_calls})
                         pending = ""
 
+                # STT (the listen half) + the answer pipeline (agent fired -> done) =
+                # the whole turn. `stt` is shown on its own so it can be subtracted back
+                # out. Note: on a multi-burst query stt_time sums bursts that overlapped
+                # your speech, so total_response is an upper bound, not strictly serial.
+                answer_sec = time.perf_counter() - turn_t0
+                timing["stt"] = round(stt_time["sec"], 2)
+                timing["total_response"] = round(stt_time["sec"] + answer_sec, 2)
                 await send_json({"type": "timing", "stages": timing})
+                await send_cost()
                 await send_json({"type": "turn_end"})
                 pending = ""                          # answered — clear the buffer
+                stt_acc["in"] = stt_acc["out"] = 0     # STT billed — reset for next query
+                stt_time["sec"] = 0.0
             except asyncio.CancelledError:
-                # user spoke again; keep `pending` so the next run includes it.
+                # user spoke again; keep `pending` (and its STT tokens) for the next run.
                 await send_json({"type": "turn_end", "reason": "interrupted"})
                 raise
             except Exception as exc:                  # keep the socket alive
                 await send_json({"type": "error", "message": str(exc)[:300]})
                 await send_json({"type": "turn_end"})
                 pending = ""
+                stt_acc["in"] = stt_acc["out"] = 0
+                stt_time["sec"] = 0.0
 
         # ---- fire the agent once the user has been quiet for SETTLE_MS ------------
         async def settle_then_run():
@@ -277,9 +353,14 @@ def make_voice_router(*, runners, session_service, judge, mask) -> APIRouter:
             if settle_task and not settle_task.done():
                 settle_task.cancel()
             async with stt_lock:
-                text = await transcribe(pcm)
+                _t = time.perf_counter()
+                text, stt_usage = await transcribe(pcm)
+                stt_time["sec"] += time.perf_counter() - _t   # time this burst's STT
             if text:
                 pending = f"{pending} {text}".strip() if pending else text
+                tin, tout = cost.usage_tokens(stt_usage)   # bill this burst's STT
+                stt_acc["in"] += tin
+                stt_acc["out"] += tout
                 await send_json({"type": "partial_transcript", "text": pending})
             restart_settle()
 

@@ -35,40 +35,37 @@
   // Each `caption` = one sentence + the exact playback duration of its audio clip.
   // We reveal its words across that duration, anchored to when the clip starts
   // playing (playCtx clock), so words surface roughly as they're spoken.
-  let segQueue = [], curSeg = null, awaitCaption = null, revealedText = '', revealRAF = 0;
-  let revealNode = null;      // stable target for the reveal (outlives global `node`)
-  let pendingFinal = null;    // authoritative full text, applied once reveal drains
+  let segQueue = [], revealedText = '', revealNode = null, pendingFinal = null;
+  let revealActive = false, revealTimer = 0, revealKicked = false;
 
   function resetReveal() {
-    segQueue = []; curSeg = null; awaitCaption = null; revealedText = '';
-    revealNode = null; pendingFinal = null;
-    if (revealRAF) { cancelAnimationFrame(revealRAF); revealRAF = 0; }
+    segQueue = []; revealedText = ''; revealNode = null; pendingFinal = null;
+    revealActive = false; revealKicked = false;
+    if (revealTimer) { cancelAnimationFrame(revealTimer); revealTimer = 0; }
   }
 
-  function ensureReveal() {
-    if (revealRAF) return;
-    const step = () => {
-      revealRAF = 0;
-      if (!curSeg && segQueue.length && segQueue[0].startAt != null) curSeg = segQueue.shift();
-      const bubble = revealNode && revealNode.querySelector('.bubble');
-      if (curSeg && playCtx) {
-        const now = playCtx.currentTime;
-        let shown = curSeg.words.length;
-        if (curSeg.durSec > 0) {
-          const frac = Math.max(0, Math.min(1, (now - curSeg.startAt) / curSeg.durSec));
-          shown = Math.floor(frac * curSeg.words.length);
-        }
-        if (bubble) bubble.innerHTML = md(revealedText + curSeg.words.slice(0, shown).join(''));
-        if (now >= curSeg.startAt + curSeg.durSec) { revealedText += curSeg.text; curSeg = null; }
-        scroll();
-      }
-      if (curSeg || segQueue.length) {
-        revealRAF = requestAnimationFrame(step);
-      } else if (pendingFinal != null && bubble) {
-        bubble.innerHTML = md(pendingFinal); pendingFinal = null; scroll();  // reveal done
-      }
+  // Reveal sentences sequentially, each over its own audio duration, on the wall
+  // clock — kicked off when audio first plays, then chained. This matches the
+  // back-to-back audio without depending on Web Audio's scheduled clock.
+  function pumpReveal() {
+    if (revealActive) return;
+    const seg = segQueue.shift();
+    const bubble = revealNode && revealNode.querySelector('.bubble');
+    if (!seg) {                       // queue drained — apply the authoritative text
+      if (pendingFinal != null && bubble) { bubble.innerHTML = md(pendingFinal); pendingFinal = null; scroll(); }
+      return;
+    }
+    revealActive = true;
+    const start = now();
+    const tick = () => {
+      const frac = seg.durSec > 0 ? Math.min(1, (now() - start) / 1000 / seg.durSec) : 1;
+      const shown = Math.floor(frac * seg.words.length);
+      if (bubble) bubble.innerHTML = md(revealedText + seg.words.slice(0, shown).join(''));
+      scroll();
+      if (frac >= 1) { revealedText += seg.text; revealActive = false; revealTimer = 0; pumpReveal(); }
+      else revealTimer = requestAnimationFrame(tick);
     };
-    revealRAF = requestAnimationFrame(step);
+    tick();
   }
 
   // ---- self-injected UI ---------------------------------------------------
@@ -115,11 +112,10 @@
     src.buffer = audio;
     src.connect(playCtx.destination);
     if (playCursor < playCtx.currentTime) playCursor = playCtx.currentTime + 0.05;
-    const startTime = playCursor;
-    src.start(startTime);
+    src.start(playCursor);
     playCursor += audio.duration;
-    // the first audio chunk after a caption pins that sentence's reveal start
-    if (awaitCaption) { awaitCaption.startAt = startTime; awaitCaption = null; ensureReveal(); }
+    // first audio of the turn actually playing -> start pacing the text to it
+    if (!revealKicked && segQueue.length) { revealKicked = true; pumpReveal(); }
     if (!agentSpeaking) lastPlayStart = now();
     agentSpeaking = true;
     activeSources.push(src);
@@ -238,14 +234,19 @@
       setStatus('thinking…');
     } else if (d.type === 'tool_call') {
       calls.push({ name: d.name, args: d.args, result: null });
+      if (!node) node = addAssistant();
+      renderSteps(node.querySelector('.steps-host'), calls);   // show steps as they happen
     } else if (d.type === 'caption') {
-      // one sentence + its audio duration — queue it; the first audio chunk that
-      // follows pins its start time, then ensureReveal() paces the words to the clip.
+      // one sentence + the exact duration of its audio clip — queue it for the reveal
       if (!node) node = addAssistant();
       revealNode = node;
+      // The answer has started rendering. Close off the current "You" bubble so that
+      // if the user interrupts mid-answer, their new words start a FRESH bubble at the
+      // bottom (below this answer) instead of editing the old one sitting above it.
+      userBubble = null;
       segQueue.push({ text: d.text || '', words: (d.text || '').match(/\S+\s*/g) || [],
-                      durSec: (d.dur_ms || 0) / 1000, startAt: null });
-      awaitCaption = segQueue[segQueue.length - 1];
+                      durSec: (d.dur_ms || 0) / 1000 });
+      if (revealKicked) pumpReveal();   // audio already playing -> pace this one too
     } else if (d.type === 'response_text') {
       if (!node) node = addAssistant();
       const host = node.querySelector('.steps-host');
@@ -254,7 +255,7 @@
       userBubble = null;   // answer delivered — next words start a NEW "You" bubble
       // If the word-by-word reveal is still catching up to the audio, hand it the
       // authoritative full text to apply when it finishes; else set it now.
-      if (curSeg || segQueue.length) { pendingFinal = d.text || ''; }
+      if (revealActive || segQueue.length) { pendingFinal = d.text || ''; }
       else { node.querySelector('.bubble').innerHTML = md(d.text || ''); }
       scroll();
     } else if (d.type === 'blocked') {
@@ -264,10 +265,28 @@
       scroll();
     } else if (d.type === 'timing') {
       if (node) {
+        const s = Object.assign({}, d.stages);
+        // whole-turn number goes in bold at the end; stt stays inline so it's subtractable
+        const total = s.total_response; delete s.total_response;
         const line = document.createElement('div');
         line.className = 'hint';
         line.style.textAlign = 'left';
-        line.textContent = 'latency: ' + Object.entries(d.stages).map(([k, v]) => `${k} ${v}s`).join(' · ');
+        const per = Object.entries(s).map(([k, v]) => `${k} ${v}s`).join(' · ');
+        line.innerHTML = 'latency: ' + per +
+          (total != null ? ` &nbsp;·&nbsp; <strong>total_response ${total}s</strong>` : '');
+        node.appendChild(line);
+      }
+    } else if (d.type === 'cost') {
+      if (node) {
+        const money = x => '$' + (x || 0).toFixed(5);
+        const LABEL = { stt: 'stt', judge: 'judge', agent: 'agent', mask: 'masker', tts: 'tts' };
+        const parts = Object.entries(d.stages).map(([k, v]) =>
+          `${LABEL[k] || k} ${money(v.usd)}${v.measured ? '' : ' (est)'}`);
+        const line = document.createElement('div');
+        line.className = 'hint';
+        line.style.textAlign = 'left';
+        line.innerHTML = '<strong>cost: ' + money(d.total) + ' total</strong> &nbsp;·&nbsp; ' +
+          parts.join(' · ');
         node.appendChild(line);
       }
     } else if (d.type === 'error') {

@@ -62,8 +62,12 @@ def pcm16_to_wav(pcm: bytes, sample_rate: int = 16000) -> bytes:
     return buf.getvalue()
 
 
-async def transcribe(pcm: bytes, sample_rate: int = 16000) -> str:
-    """Raw PCM utterance -> transcript ('' if no speech was recognized)."""
+async def transcribe(pcm: bytes, sample_rate: int = 16000):
+    """Raw PCM utterance -> (transcript, usage_metadata).
+
+    transcript is '' if no speech was recognized. usage_metadata is the google-genai
+    usage object (audio-in / text-out token counts) so the caller can price the call.
+    """
     wav = pcm16_to_wav(pcm, sample_rate)
     resp = await _client().aio.models.generate_content(
         model=STT_MODEL,
@@ -72,4 +76,4 @@ async def transcribe(pcm: bytes, sample_rate: int = 16000) -> str:
             types.Part(text=_TRANSCRIBE_PROMPT),
         ])],
     )
-    return _clean(resp.text or "")
+    return _clean(resp.text or ""), getattr(resp, "usage_metadata", None)

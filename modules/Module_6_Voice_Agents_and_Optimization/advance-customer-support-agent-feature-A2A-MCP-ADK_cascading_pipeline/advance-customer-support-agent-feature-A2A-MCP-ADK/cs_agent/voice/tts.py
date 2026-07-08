@@ -53,12 +53,16 @@ def _audio_config() -> types.GenerateContentConfig:
     )
 
 
-async def synthesize_stream(text: str):
+async def synthesize_stream(text: str, usage_out: dict | None = None):
     """Yield 16-bit PCM chunks (24 kHz mono) as the model produces them.
 
     This is what makes voice feel fast: gemini-*-flash-tts streams audio out
     incrementally, so the first chunk arrives in ~1-2s instead of waiting for the
     whole reply to be synthesized. Yields nothing for empty input.
+
+    If `usage_out` (a dict) is passed, the token usage of this synthesis is ADDED
+    into usage_out["in"]/["out"] so the caller can price the call (Gemini reports
+    usage on the stream's final event).
     """
     if not text.strip():
         return
@@ -71,6 +75,13 @@ async def synthesize_stream(text: str):
             data = None
         if data:
             yield data
+        if usage_out is not None:
+            um = getattr(ev, "usage_metadata", None)
+            if um:   # last event carries the totals; keep the largest seen
+                usage_out["in"] = max(usage_out.get("in", 0),
+                                      getattr(um, "prompt_token_count", 0) or 0)
+                usage_out["out"] = max(usage_out.get("out", 0),
+                                       getattr(um, "candidates_token_count", 0) or 0)
 
 
 async def synthesize(text: str) -> bytes:
