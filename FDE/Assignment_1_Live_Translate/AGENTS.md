@@ -41,10 +41,11 @@ not relax, reinterpret, or "improve" these requirements — conform to them.
 ### Logging & tracing
 - Gateway: one structured line per request (method, url, status, duration ms).
 - AI service: one structured line per translation (cached, latencyMs, chars). Use the provided `lib/logger.py`.
-- **Trace correlation (your first trace):** the gateway generates a request ID per incoming
-  request, logs it, and forwards it to the AI service (e.g. an `x-request-id` header). The AI
-  service logs that same ID on its translation line. One request must be greppable end-to-end
-  across both services by that single ID. Keep it this simple — full tracing comes later.
+- **Trace correlation (your first trace):** the gateway derives a request ID for every request
+  — reusing an inbound `X-Request-Id` header if present, otherwise generating one — logs it, and
+  forwards it to the AI service (`x-request-id` header). The AI service logs that same ID on its
+  translation line. One request must be greppable end-to-end across both services by that single
+  ID. Keep it this simple — full tracing comes later.
 
 ### Performance / SLA gate
 - `python benchmark/bench.py` MUST exit `0`. It enforces `benchmark/sla.json`:

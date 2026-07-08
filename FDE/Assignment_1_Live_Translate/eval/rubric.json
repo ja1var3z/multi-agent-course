@@ -29,7 +29,7 @@
       "label": "Logging & observability",
       "points": 10,
       "type": "auto",
-      "check": "/stats returns a hit rate; /health reports the AI service; ai-service.log has structured lines"
+      "check": "/stats returns a hit rate; /health reports the AI service; ai-service.log has structured lines; a request id (X-Request-Id) correlates one request across the gateway and AI-service logs"
     },
     {
       "id": "service_separation_contract",
@@ -50,7 +50,7 @@
       "label": "Deploy & docs",
       "points": 10,
       "type": "manual",
-      "check": "one-command run per service; clear README run notes; clean git hygiene (auto-flagged below)"
+      "check": "both services deployed on Fly.io with the public gateway /health reachable (pass --deploy-url to capture it); one-command local run; clear README run notes; clean git hygiene (auto-flagged below)"
     }
   ]
 }

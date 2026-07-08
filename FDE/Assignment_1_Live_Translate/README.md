@@ -256,7 +256,7 @@ Your backend must:
 - [ ] **LLM** — translate EN → **Mexican Spanish** (es-MX register, not generic Spanish) via a real LLM call.
 - [ ] **Caching** — two-tier (in-memory + SQLite), keyed by a hash of `(text, target)`; identical input never calls the LLM twice; `cached`/`latencyMs`/`/stats` reflect it.
 - [ ] **Logging** — one structured line per request in the gateway **and** per translation in the AI service; greppable.
-- [ ] **Tracing** — a request ID generated at the gateway, forwarded to the AI service, and logged by both; one request is greppable end-to-end across both services by that single ID.
+- [ ] **Tracing** — a request ID at the gateway (reusing an inbound `X-Request-Id` if present, else generated), forwarded to the AI service, and logged by both; one request is greppable end-to-end across both services by that single ID.
 - [ ] **Performance** — meets every SLA in `benchmark/sla.json`; `python benchmark/bench.py` exits `0`.
 - [ ] **Runs locally** — each service starts with a single documented command; secrets come from `.env` (never committed).
 - [ ] **Deployed on Fly.io** — both services deployed; the extension works against the public gateway URL, not just localhost.
@@ -295,7 +295,7 @@ Your backend must:
 **Logging & tracing**
 - [ ] Gateway logs one structured line per request: method, url, status, duration (ms)
 - [ ] AI service logs one structured line per translation: cached, latencyMs, chars
-- [ ] A request ID is generated at the gateway, forwarded to the AI service, and logged by both — one request is greppable end-to-end across both services by that single ID
+- [ ] A request ID is set at the gateway (inbound `X-Request-Id` reused if present, else generated), forwarded to the AI service, and logged by both — one request is greppable end-to-end across both services by that single ID
 
 **Performance (SLA gate)**
 - [ ] `python benchmark/bench.py` exits `0` — every SLA in `benchmark/sla.json` passes
