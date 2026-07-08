@@ -7,10 +7,12 @@ evidence for the human-graded portion, and writes a submission report you turn
 in ALONGSIDE your video demo.
 
     # with both services running:
-    python eval/eval.py --student "Jane Doe" --video "https://youtu.be/…"
+    python eval/eval.py --student "Jane Doe" --video "https://youtu.be/…" \
+        --deploy-url "https://your-gateway.fly.dev"
 
 Outputs (next to this script):
-    REPORT.md     ← human-readable scored rubric — SUBMIT THIS
+    REPORT.md     ← your scored rubric SCORECARD. The /fde-live-translate-eval
+                    skill folds this into PRODUCT_EVAL.md, which is what you submit.
     report.json   ← machine-readable, same data
 
 `auto` criteria are scored here. `manual` criteria (Mexican-Spanish quality,
@@ -24,6 +26,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import uuid
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -41,9 +44,12 @@ def get(url, timeout=10):
         return 0, None
 
 
-def post(url, payload, timeout=60):
+def post(url, payload, timeout=60, headers=None):
     data = json.dumps(payload).encode()
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
+    h = {"Content-Type": "application/json"}
+    if headers:
+        h.update(headers)
+    req = urllib.request.Request(url, data=data, headers=h, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return r.status, json.loads(r.read().decode())
@@ -59,6 +65,7 @@ def main():
     ap.add_argument("--ai", default="http://localhost:8000")
     ap.add_argument("--student", default="")
     ap.add_argument("--video", default="")
+    ap.add_argument("--deploy-url", default="", help="public Fly.io gateway URL, e.g. https://your-gw.fly.dev")
     args = ap.parse_args()
 
     ev = {}  # evidence bag
@@ -117,17 +124,38 @@ def main():
     award("performance_sla", crit["performance_sla"]["points"] if sla_pass else 0,
           f"bench SLA gate {'PASS' if sla_pass else 'FAIL'}")
 
-    # ---- logging_observability ----
+    # ---- logging_observability (incl. trace correlation) ----
     _, stats = get(args.target + "/stats")
     _, health = get(args.target + "/health")
     has_hit_rate = bool(stats and any("hit_rate" in k for k in stats))
     health_nests_ai = bool(health and isinstance(health.get("aiService"), (dict, str)) and health.get("aiService") != "unreachable")
-    log_file = ROOT / "backend" / "ai-service-python" / "ai-service.log"
-    log_ok = log_file.exists() and log_file.stat().st_size > 0
+    ai_log = ROOT / "backend" / "ai-service-python" / "ai-service.log"
+    log_ok = ai_log.exists() and ai_log.stat().st_size > 0
+
+    # trace: send a sentinel X-Request-Id, confirm it lands in BOTH services' logs
+    trace_id = "evaltrace-" + uuid.uuid4().hex[:12]
+    post(args.target + "/translate", {"text": "trace probe", "target": "es-MX"},
+         headers={"X-Request-Id": trace_id})
+    time.sleep(0.2)
+
+    def _log_has(token, candidates):
+        for p in candidates:
+            try:
+                if p.exists() and token in p.read_text(errors="ignore"):
+                    return True
+            except Exception:
+                pass
+        return False
+
+    gw_logs = [ROOT / "gateway.log", ROOT / "backend" / "gateway-node" / "gateway.log"]
+    ai_logs = [ai_log, ROOT / "ai-service.log"]
+    trace_ok = _log_has(trace_id, gw_logs) and _log_has(trace_id, ai_logs)
+    ev["trace_correlated"] = trace_ok
+
     log_pts = crit["logging_observability"]["points"]
-    got = sum([has_hit_rate, health_nests_ai, log_ok]) / 3 * log_pts
+    got = sum([has_hit_rate, health_nests_ai, log_ok, trace_ok]) / 4 * log_pts
     award("logging_observability", round(got),
-          f"stats_hit_rate={has_hit_rate}, health_reports_ai={health_nests_ai}, ai_log_file={log_ok}")
+          f"stats_hit_rate={has_hit_rate}, health_reports_ai={health_nests_ai}, ai_log_file={log_ok}, trace_correlated={trace_ok}")
 
     # ---- service_separation_contract ----
     s_bad, _ = post(args.target + "/translate", {"nope": 1})
@@ -147,6 +175,14 @@ def main():
         bad, widget_diff = [], ""
     ev["hygiene_flags"] = bad
     ev["provided_files_changed"] = widget_diff
+
+    # ---- deploy evidence (feeds deploy_docs manual score) ----
+    ev["deploy_url"] = args.deploy_url or None
+    if args.deploy_url:
+        ds, dh = get(args.deploy_url.rstrip("/") + "/health")
+        ev["deploy_health_ok"] = bool(ds == 200 and dh)
+    else:
+        ev["deploy_health_ok"] = None
 
     # ---- manual criteria: not auto-scored ----
     for c in RUBRIC["criteria"]:
@@ -190,6 +226,7 @@ def main():
     md.append("\n## Evidence\n")
     md.append(f"- Sample translation (`Good morning, welcome!`): **{ev.get('sample_translation')}**")
     md.append(f"- Cache latency: first `{ev.get('cache_first_ms')} ms` → second `{ev.get('cache_second_ms')} ms`")
+    md.append(f"- Trace correlation (one request across both logs): {'✅ yes' if ev.get('trace_correlated') else '❌ not found'}")
     if ev.get("bench_metrics"):
         bm = ev["bench_metrics"]
         lat = bm.get("latency", {})
@@ -198,6 +235,10 @@ def main():
                   f"SLA **{'PASS' if bm.get('sla_pass') else 'FAIL'}**")
         cost = bm.get("cost", {})
         md.append(f"- Cost: `${cost.get('per_miss_usd',0):.6f}`/miss; monthly savings from cache `${cost.get('monthly_savings_usd',0):,.2f}`")
+    if ev.get("deploy_url"):
+        md.append(f"- Deploy: `{ev['deploy_url']}/health` → {'✅ ok' if ev.get('deploy_health_ok') else '❌ UNREACHABLE'}")
+    else:
+        md.append("- Deploy: _(no --deploy-url given; grader verifies your Fly.io URL from README/video)_")
     if ev.get("hygiene_flags"):
         md.append(f"- ⚠️ Git hygiene flags (should be empty): `{ev['hygiene_flags']}`")
     if ev.get("provided_files_changed"):
@@ -208,7 +249,8 @@ def main():
         (HERE / "_bench.json").unlink()
 
     print(f"\nAuto score: {auto_got}/{auto_total}  (+ {manual_total} manual pts from grader)")
-    print(f"Wrote {HERE/'REPORT.md'} and {HERE/'report.json'} — submit REPORT.md with your video.\n")
+    print(f"Wrote {HERE/'REPORT.md'} (your scorecard) and {HERE/'report.json'}.")
+    print("Run /fde-live-translate-eval to fold this into PRODUCT_EVAL.md — that's your submission.\n")
     return 0
 
 

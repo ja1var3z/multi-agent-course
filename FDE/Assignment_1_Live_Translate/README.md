@@ -256,7 +256,7 @@ Your backend must:
 - [ ] **LLM** — translate EN → **Mexican Spanish** (es-MX register, not generic Spanish) via a real LLM call.
 - [ ] **Caching** — two-tier (in-memory + SQLite), keyed by a hash of `(text, target)`; identical input never calls the LLM twice; `cached`/`latencyMs`/`/stats` reflect it.
 - [ ] **Logging** — one structured line per request in the gateway **and** per translation in the AI service; greppable.
-- [ ] **Tracing** — a request ID generated at the gateway, forwarded to the AI service, and logged by both; one request is greppable end-to-end across both services by that single ID.
+- [ ] **Tracing** — a request ID at the gateway (reusing an inbound `X-Request-Id` if present, else generated), forwarded to the AI service, and logged by both; one request is greppable end-to-end across both services by that single ID.
 - [ ] **Performance** — meets every SLA in `benchmark/sla.json`; `python benchmark/bench.py` exits `0`.
 - [ ] **Runs locally** — each service starts with a single documented command; secrets come from `.env` (never committed).
 - [ ] **Deployed on Fly.io** — both services deployed; the extension works against the public gateway URL, not just localhost.
@@ -295,7 +295,7 @@ Your backend must:
 **Logging & tracing**
 - [ ] Gateway logs one structured line per request: method, url, status, duration (ms)
 - [ ] AI service logs one structured line per translation: cached, latencyMs, chars
-- [ ] A request ID is generated at the gateway, forwarded to the AI service, and logged by both — one request is greppable end-to-end across both services by that single ID
+- [ ] A request ID is set at the gateway (inbound `X-Request-Id` reused if present, else generated), forwarded to the AI service, and logged by both — one request is greppable end-to-end across both services by that single ID
 
 **Performance (SLA gate)**
 - [ ] `python benchmark/bench.py` exits `0` — every SLA in `benchmark/sla.json` passes
@@ -344,6 +344,35 @@ curl -sf https://<your-gateway-app>.fly.dev/health
 | Logging & observability | 10 | Structured, useful logs; a request ID correlates one request across both services; accurate `/stats`; `/health` reports the AI service |
 | Service separation & contract | 10 | Clean gateway↔AI split; correct status codes; graceful errors |
 | Deploy & docs | 10 | Both services deployed on Fly.io and reachable via the public gateway; one-command local run; clear `.env.example`; your own short run notes |
+
+### Sample scorecard
+
+This is what a strong submission looks like — the scored rubric your `PRODUCT_EVAL.md`
+captures. **Illustrative only**; your numbers must come from your own run (fabricating
+them is an automatic fail).
+
+> **Assignment 1 — Live Translate · Jordan Lee · 93 / 100**
+
+| Criterion | Pts | Awarded | Status | Evidence |
+|-----------|-----|---------|--------|----------|
+| Widget lights up | 15 | 15 | ✅ Pass | `/translate` + `/translate/batch` return valid shapes; page flips to es-MX live on homedepot.com |
+| Caching correctness | 20 | 20 | ✅ Pass | 2nd identical call `cached: true`, **3 ms vs 812 ms**; `translations.db` has 214 rows; survives restart |
+| Performance & SLA | 15 | 15 | ✅ Pass | `bench.py` exits 0 — hit p95 4 ms, miss p95 2.9 s, hit rate 71%, 34 req/s |
+| Logging & observability | 10 | 10 | ✅ Pass | Structured lines in both services; one trace id correlates a request end-to-end; `/stats` hit rate accurate |
+| Service separation & contract | 10 | 10 | ✅ Pass | Clean gateway↔AI split; `400` on empty text; gateway `/health` nests AI-service health |
+| LLM & prompt quality | 20 | 17 | ⚠️ Partial | Natural es-MX, translation-only; `$1,299.00` and `SKU-4471` preserved; one idiom rendered a little stiff |
+| Deploy & docs | 10 | 6 | ⚠️ Partial | Deployed on Fly.io, public gateway healthy; run notes present; AI service left publicly reachable (no `flycast`) |
+| **Total** | **100** | **93** | | Auto: 70/70 · Manual: 23/30 |
+
+**Red-line checks (auto-flagged):** ✅ no secrets committed · ✅ no edits to provided `widget/` · `extension/` · `benchmark/`
+
+**Captured evidence (excerpt)**
+- Samples: *"Good morning, welcome!"* → *"¡Buenos días, bienvenido!"* · *"Add to cart"* → *"Agregar al carrito"*
+- Latency: miss p95 **2.9 s** · hit p95 **4 ms** (~700× faster on a cache hit)
+- Cost: ~$0.0004 / miss · at 71% hit rate, projected monthly bill is ~⅓ of no-cache
+- Deploy: `https://jordan-livetranslate-gw.fly.dev/health` → `{"status":"ok"}`
+
+Read your `eval/REPORT.md` the same way: fix any **Fail/Partial** rows before you record the demo.
 
 ---
 
