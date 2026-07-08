@@ -48,7 +48,7 @@ import psycopg2
 
 HERE = Path(__file__).resolve().parent
 MANIFEST = json.loads((HERE / "manifest.json").read_text(encoding="utf-8"))
-# Skip any clip listed in the manifest's `exclude` (e.g. judge-block queries q09/q10).
+# Skip any query id listed in the manifest's `exclude` list (normally empty — all 15 run).
 _EXCLUDE = set(MANIFEST.get("exclude", []))
 MANIFEST["queries"] = [q for q in MANIFEST["queries"] if q["id"] not in _EXCLUDE]
 

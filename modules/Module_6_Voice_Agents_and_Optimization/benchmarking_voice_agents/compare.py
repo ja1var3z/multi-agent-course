@@ -65,7 +65,7 @@ WIN_LABEL = {"cascade": "Cascade", "s2s": "S2S", "tie": "~ tie"}
 fig, ax = plt.subplots(figsize=(9.2, 4.6))
 ax.axis("off")
 ax.set_title("Voice Agent Benchmark — Cascade vs Speech-to-Speech\n"
-             "15 clips × 3 runs · tools = deterministic · answers = LLM-judge (gpt-5)",
+             "15 audio queries × 3 runs · tools = deterministic · answers = LLM-judge (gpt-5)",
              fontsize=13, fontweight="bold", color=INK, pad=18)
 
 cells = [[r[0], r[1], r[2], WIN_LABEL[r[3]]] for r in rows]
@@ -107,7 +107,7 @@ def twobar(ax, cval, sval, title, fmt, cerr=None, serr=None):
     ax.margins(y=0.18)
 
 
-fig, axes = plt.subplots(2, 2, figsize=(11, 8.2))
+fig, axes = plt.subplots(2, 2, figsize=(13, 9.6))
 fig.suptitle("Cascade vs Speech-to-Speech — key metrics", fontsize=15, fontweight="bold", color=INK, y=0.99)
 
 # (0,0) quality — grouped 0–1: tool & response, each precision + recall
@@ -122,7 +122,7 @@ b1 = qa.bar(x - w / 2, cv, w, yerr=ce, capsize=3, color=CAS, label="Cascade", er
 b2 = qa.bar(x + w / 2, sv, w, yerr=se, capsize=3, color=S2S, label="S2S", error_kw={"ecolor": "#888", "elinewidth": 1})
 qa.set_xticks(x); qa.set_xticklabels(labels)
 qa.set_title("Accuracy & quality  (higher = better)", fontweight="bold", fontsize=11, color=INK)
-qa.set_ylabel("score (0–1)"); qa.set_ylim(0, 1.18)
+qa.set_ylabel("score (0–1)"); qa.set_ylim(0, 1.42)
 qa.bar_label(b1, labels=[f"{v:.2f}" for v in cv], padding=2, fontsize=8)
 qa.bar_label(b2, labels=[f"{v:.2f}" for v in sv], padding=2, fontsize=8)
 qa.legend(fontsize=9, loc="upper right"); qa.spines[["top", "right"]].set_visible(False)
@@ -157,5 +157,34 @@ fig.tight_layout(rect=[0, 0.03, 1, 0.97])
 fig.savefig(OUT / "comparison_chart.png", dpi=200, bbox_inches="tight", facecolor="white")
 plt.close(fig)
 
+
+# --------------------- STANDALONE ACCURACY / QUALITY CHART ---------------------
+# Just the four precision/recall quality bars, on their own — same data as the (0,0)
+# panel of comparison_chart.png but as a single focused figure.
+fig, ax = plt.subplots(figsize=(10.5, 6.4))
+qlabels = ["Tool\naccuracy", "Tool\nrecall", "Response\naccuracy", "Response\ncompleteness"]
+qcv = [C['tool_acc_mean'], C['tool_recall_mean'], C['response_acc_mean'], C['response_compl_mean']]
+qsv = [S['tool_acc_mean'], S['tool_recall_mean'], S['response_acc_mean'], S['response_compl_mean']]
+qce = [C['tool_acc_std'], C['tool_recall_std'], C['response_acc_std'], C['response_compl_std']]
+qse = [S['tool_acc_std'], S['tool_recall_std'], S['response_acc_std'], S['response_compl_std']]
+qx = np.arange(len(qlabels)); qw = 0.36
+qb1 = ax.bar(qx - qw / 2, qcv, qw, yerr=qce, capsize=4, color=CAS, label="Cascade",
+             error_kw={"ecolor": "#888", "elinewidth": 1})
+qb2 = ax.bar(qx + qw / 2, qsv, qw, yerr=qse, capsize=4, color=S2S, label="S2S",
+             error_kw={"ecolor": "#888", "elinewidth": 1})
+ax.set_xticks(qx); ax.set_xticklabels(qlabels, fontsize=10)
+ax.set_title("Agentic quality — precision & recall  (higher = better)\n"
+             "15 audio queries × 3 runs · tools = deterministic · response = LLM-judge (sees tool calls)",
+             fontsize=12.5, fontweight="bold", color=INK, pad=14)
+ax.set_ylabel("score (0–1)"); ax.set_ylim(0, 1.45)
+ax.bar_label(qb1, labels=[f"{v:.2f}" for v in qcv], padding=3, fontsize=10)
+ax.bar_label(qb2, labels=[f"{v:.2f}" for v in qsv], padding=3, fontsize=10)
+ax.legend(fontsize=10, loc="lower right")
+ax.spines[["top", "right"]].set_visible(False)
+fig.tight_layout()
+fig.savefig(OUT / "comparison_accuracy.png", dpi=200, bbox_inches="tight", facecolor="white")
+plt.close(fig)
+
 print("wrote:", OUT / "comparison_table.png")
 print("wrote:", OUT / "comparison_chart.png")
+print("wrote:", OUT / "comparison_accuracy.png")
