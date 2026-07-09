@@ -15,7 +15,11 @@ Server code should use `from telemetry import get_tracer, ATTR` and call
 
 import os
 
-PHOENIX_OTLP_ENDPOINT = "http://localhost:6006/v1/traces"
+
+def _phoenix_port() -> int:
+    """Phoenix UI/OTLP port. Cascade profile = 6006 (s2s uses 6007) so both apps can
+    run their own Phoenix side by side."""
+    return 6006
 
 
 # --- Attribute keys (OpenInference semantic conventions) ---------------------
@@ -82,15 +86,21 @@ def init_telemetry():
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
     from openinference.instrumentation.google_genai import GoogleGenAIInstrumentor
 
-    # Best-effort launch of ONE local Phoenix. If it's already running (e.g. the other
-    # app started it), the port is taken and this fails — that's fine: both apps still
-    # export to the same http://localhost:6006 below, so they share one Phoenix UI.
+    # Each app runs its OWN Phoenix. Both the HTTP UI port AND the gRPC OTLP collector
+    # port must be distinct, or the 2nd app crashes trying to bind the fixed gRPC 4317.
+    # Derive gRPC from the UI port: cascade 6006->4317, s2s 6007->4318. Set via env
+    # (the modern way — launch_app(port=) is deprecated).
+    port = _phoenix_port()
+    grpc_port = 4317 + (port - 6006)
+    base = f"http://localhost:{port}"
+    os.environ["PHOENIX_PORT"] = str(port)
+    os.environ["PHOENIX_GRPC_PORT"] = str(grpc_port)
     try:
         px.launch_app()
     except Exception as exc:  # noqa: BLE001
-        print(f"[telemetry] reusing the Phoenix already on :6006 (launch skipped: {exc})")
+        print(f"[telemetry] reusing the Phoenix already on :{port} (launch skipped: {exc})")
 
-    exporter = OTLPSpanExporter(endpoint=PHOENIX_OTLP_ENDPOINT)
+    exporter = OTLPSpanExporter(endpoint=f"{base}/v1/traces")
     provider = TracerProvider()
     provider.add_span_processor(BatchSpanProcessor(exporter))
     trace.set_tracer_provider(provider)
@@ -100,12 +110,12 @@ def init_telemetry():
     GoogleGenAIInstrumentor().instrument(tracer_provider=provider)
 
     # Tell ADK to capture message content in its own spans too
-    os.environ.setdefault("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:6006")
+    os.environ.setdefault("OTEL_EXPORTER_OTLP_ENDPOINT", base)
     os.environ.setdefault("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT", "true")
 
     # Pop the dashboard open so it's visible the moment the server starts.
     try:
-        webbrowser.open("http://localhost:6006")
+        webbrowser.open(base)
     except Exception:  # noqa: BLE001 - headless / no browser is fine
         pass
 
@@ -129,7 +139,7 @@ def get_tracer():
     if telemetry_enabled():
         try:
             _tracer = init_telemetry()
-            print("[telemetry] ENABLED -> Phoenix UI at http://localhost:6006")
+            print(f"[telemetry] ENABLED -> Phoenix UI at http://localhost:{_phoenix_port()}")
         except Exception as exc:  # noqa: BLE001 - never let telemetry break the app
             print(f"[telemetry] init failed, continuing without it: {exc}")
             _tracer = _NoopTracer()

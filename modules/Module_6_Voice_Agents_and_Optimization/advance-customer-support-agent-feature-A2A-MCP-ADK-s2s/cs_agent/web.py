@@ -53,7 +53,8 @@ get_tracer()
 
 logger = logging.getLogger(__name__)
 
-toolbox_client = ToolboxSyncClient(url="http://127.0.0.1:5000")
+# s2s profile — its OWN MCP Toolbox on 5001 (cascade uses 5000), so both run at once.
+toolbox_client = ToolboxSyncClient(url="http://127.0.0.1:5001")
 database_tools = toolbox_client.load_toolset("cs_agent_tools")
 
 session_service = InMemorySessionService()
@@ -518,9 +519,9 @@ input.addEventListener('input',()=>{input.style.height='auto';input.style.height
 
 def main():
     import uvicorn
-    host = os.getenv("VOICE_HOST", "127.0.0.1")
-    port = int(os.getenv("VOICE_PORT", "8001"))
-    print(f"Customer Support VOICE UI → http://{host}:{port}  (model: {VOICE_MODEL}, voice: {VOICE_NAME})")
+    host = "127.0.0.1"
+    port = 8001                       # s2s profile (cascade uses 8000)
+    print(f"Customer Support VOICE UI -> http://{host}:{port}  (model: {VOICE_MODEL}, voice: {VOICE_NAME})")
     uvicorn.run(app, host=host, port=port, log_level="warning")
 
 

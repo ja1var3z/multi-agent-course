@@ -35,18 +35,25 @@ PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_NAME="customer-support"
 PY_VERSION="3.12"
 
-PGDATA="${PGDATA:-$HOME/postgres_data}"
-PGHOST="127.0.0.1"
-PGPORT="5432"
-DB_NAME="toolbox_db"
-DB_USER="toolbox_user"
-DB_PASS="mysecretpassword"
+# Load the project's .env EARLY (if present) so the ports below honor its profile.
+# Skipped during first-run `setup` (no .env yet) -> the defaults apply then.
+if [ -f "$PROJECT_DIR/.env" ]; then set -a; . "$PROJECT_DIR/.env"; set +a; fi
 
-TOOLBOX_PORT="5000"
+# Every port/DB value is env-overridable (defaults = the original values), so a second
+# project runs on its own ports just by shipping a different .env — nothing hard-coded.
+PGHOST="${PGHOST:-127.0.0.1}"
+PGPORT="${PGPORT:-5432}"
+PGDATA="${PGDATA:-$HOME/postgres_data_$PGPORT}"   # per-port so two DBs don't clobber
+DB_NAME="${PGDATABASE:-toolbox_db}"
+DB_USER="${PGUSER:-toolbox_user}"
+DB_PASS="${PGPASSWORD:-mysecretpassword}"
+
+# Toolbox launch port: TOOLBOX_PORT if set, else parsed out of TOOLBOX_URL, else 5000.
+TOOLBOX_PORT="${TOOLBOX_PORT:-$(printf '%s' "${TOOLBOX_URL:-http://127.0.0.1:5000}" | sed -E 's#.*:([0-9]+).*#\1#')}"
 TOOLBOX_PKG="@toolbox-sdk/server@1.5.0"
-JUDGE_PORT="10002"
-MASK_PORT="10003"
-WEB_PORT="${WEB_PORT:-8000}"
+JUDGE_PORT="${A2A_JUDGE_PORT:-10002}"
+MASK_PORT="${A2A_MASK_PORT:-10003}"
+WEB_PORT="${WEB_PORT:-${VOICE_PORT:-8000}}"
 
 RUN_DIR="$PROJECT_DIR/.run"
 mkdir -p "$RUN_DIR"
@@ -454,7 +461,7 @@ start_services() {
 cmd_start() {
   start_services
   echo
-  say "Launching agent CLI (Phoenix UI will open at http://localhost:6006)"
+  say "Launching agent CLI (Phoenix UI will open at http://localhost:${PHOENIX_PORT:-6006})"
   echo "----------------------------------------------------------------------"
   # Warnings are silenced in-process (agent_cli sets warnings.showwarning to a
   # no-op). We do NOT filter stderr at the shell here: redirecting stderr makes
@@ -465,7 +472,7 @@ cmd_start() {
 cmd_web() {
   start_services
   echo
-  say "Launching web UI at http://127.0.0.1:$WEB_PORT  (Phoenix at http://localhost:6006)"
+  say "Launching web UI at http://127.0.0.1:$WEB_PORT  (Phoenix at http://localhost:${PHOENIX_PORT:-6006})"
   echo "----------------------------------------------------------------------"
   ( cd "$PROJECT_DIR" && WEB_PORT="$WEB_PORT" python -m cs_agent.web \
       2> >(grep --line-buffered -vE "$WARN_FILTER" >&2) )

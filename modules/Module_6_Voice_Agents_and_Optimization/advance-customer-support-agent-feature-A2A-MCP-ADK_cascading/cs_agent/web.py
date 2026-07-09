@@ -49,10 +49,12 @@ os.environ.pop("GOOGLE_GENAI_USE_VERTEXAI", None)
 # Observability (Phoenix). No-op unless TELEMETRY=true — see telemetry.py / .env.
 tracer = get_tracer()
 
-A2A_JUDGE_HOST = os.getenv("A2A_JUDGE_HOST", "localhost")
-A2A_JUDGE_PORT = int(os.getenv("A2A_JUDGE_PORT", "10002"))
-A2A_MASK_HOST = os.getenv("A2A_MASK_HOST", "localhost")
-A2A_MASK_PORT = int(os.getenv("A2A_MASK_PORT", "10003"))
+# Cascade profile — hard-coded ports (kept distinct from the s2s app so both can run
+# at once). A2A Judge/Mask, and the MCP Toolbox this app talks to.
+A2A_JUDGE_HOST = "localhost"
+A2A_JUDGE_PORT = 10002
+A2A_MASK_HOST = "localhost"
+A2A_MASK_PORT = 10003
 
 toolbox_client = ToolboxSyncClient(url="http://127.0.0.1:5000")
 database_tools = toolbox_client.load_toolset("cs_agent_tools")
@@ -610,8 +612,8 @@ inp.addEventListener('input',()=>{inp.style.height='auto';inp.style.height=Math.
 def main():
     import uvicorn
     from cs_agent.voice.router import print_config_warnings
-    host = os.getenv("WEB_HOST", "127.0.0.1")
-    port = int(os.getenv("WEB_PORT", "8000"))
+    host = "127.0.0.1"
+    port = 8000                       # cascade profile (s2s uses 8001)
     print(f"Customer Support web UI -> http://{host}:{port}")
     print_config_warnings()
     uvicorn.run(app, host=host, port=port, log_level="warning")

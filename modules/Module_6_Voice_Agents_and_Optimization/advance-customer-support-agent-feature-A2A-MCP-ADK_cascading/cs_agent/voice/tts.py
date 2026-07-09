@@ -7,6 +7,8 @@ from functools import lru_cache
 from google import genai
 from google.genai import types
 
+from telemetry import get_tracer, ATTR
+
 # Split on sentence boundaries so we can synthesize + stream sentence-by-sentence
 # (audio starts after the first sentence instead of the whole reply).
 _SENT = re.compile(r".*?[.!?…](?:\s+|$)", re.S)
@@ -66,22 +68,28 @@ async def synthesize_stream(text: str, usage_out: dict | None = None):
     """
     if not text.strip():
         return
-    stream = await _client().aio.models.generate_content_stream(
-        model=TTS_MODEL, contents=text, config=_audio_config())
-    async for ev in stream:
-        try:
-            data = ev.candidates[0].content.parts[0].inline_data.data
-        except (AttributeError, IndexError, TypeError):
-            data = None
-        if data:
-            yield data
-        if usage_out is not None:
-            um = getattr(ev, "usage_metadata", None)
-            if um:   # last event carries the totals; keep the largest seen
-                usage_out["in"] = max(usage_out.get("in", 0),
-                                      getattr(um, "prompt_token_count", 0) or 0)
-                usage_out["out"] = max(usage_out.get("out", 0),
-                                       getattr(um, "candidates_token_count", 0) or 0)
+    # Named span so this shows in telemetry as the TTS step (not a generic
+    # AsyncGenerateContent). No-op when TELEMETRY is off; spans the whole synthesis.
+    with get_tracer().start_as_current_span("tts") as _sp:
+        _sp.set_attribute(ATTR.OPENINFERENCE_SPAN_KIND, "VOICE")
+        _sp.set_attribute("voice.stage", "tts")
+        _sp.set_attribute("voice.model", TTS_MODEL)
+        stream = await _client().aio.models.generate_content_stream(
+            model=TTS_MODEL, contents=text, config=_audio_config())
+        async for ev in stream:
+            try:
+                data = ev.candidates[0].content.parts[0].inline_data.data
+            except (AttributeError, IndexError, TypeError):
+                data = None
+            if data:
+                yield data
+            if usage_out is not None:
+                um = getattr(ev, "usage_metadata", None)
+                if um:   # last event carries the totals; keep the largest seen
+                    usage_out["in"] = max(usage_out.get("in", 0),
+                                          getattr(um, "prompt_token_count", 0) or 0)
+                    usage_out["out"] = max(usage_out.get("out", 0),
+                                           getattr(um, "candidates_token_count", 0) or 0)
 
 
 async def synthesize(text: str) -> bytes:

@@ -59,8 +59,9 @@ INPUT_SAMPLE_RATE = 16000
 OUTPUT_SAMPLE_RATE = 24000
 INPUT_MIME = f"audio/pcm;rate={INPUT_SAMPLE_RATE}"
 
-A2A_JUDGE_HOST = os.getenv("A2A_JUDGE_HOST", "localhost")
-A2A_JUDGE_PORT = int(os.getenv("A2A_JUDGE_PORT", "10002"))
+# s2s profile — its OWN A2A Security Judge on 11002 (cascade uses 10002).
+A2A_JUDGE_HOST = "localhost"
+A2A_JUDGE_PORT = 11002
 
 # --- Cost estimation ---------------------------------------------------------
 # Per-1M-token prices (USD) for the Live model, split by modality (audio tokens
@@ -229,7 +230,9 @@ async def run_voice_session(websocket, runner, user_id: str, session_id: str) ->
     # agent TTFA/S2S) — same as t0 for voice (judge is concurrent), but AFTER the
     # blocking judge for text. So Total always includes the judge; agent(*) never does.
     turn = {"t0": None, "agent_t0": None, "ttfa": None, "ttft": None, "usage": None,
-            "judge_secs": None, "judge_cost": 0.0, "judge_mode": None, "guard_task": None}
+            "judge_secs": None, "judge_cost": 0.0, "judge_mode": None, "guard_task": None,
+            # captured for the Phoenix `voice.turn` span (Live gives no content spans)
+            "user_text": "", "agent_text": "", "tools": []}
     session_totals: list[float] = []
     session_cost = {"usd": 0.0, "judge": 0.0}   # usd = S2S model; judge = est. guardrail
     bg: set = set()   # background guardrail tasks (kept referenced so they aren't GC'd)
@@ -240,6 +243,7 @@ async def run_voice_session(websocket, runner, user_id: str, session_id: str) ->
         turn["ttfa"] = None; turn["ttft"] = None; turn["usage"] = None
         turn["judge_secs"] = None; turn["judge_cost"] = 0.0
         turn["judge_mode"] = None; turn["guard_task"] = None
+        turn["user_text"] = ""; turn["agent_text"] = ""; turn["tools"] = []
 
     def _mark_agent_start() -> None:
         turn["agent_t0"] = time.monotonic()
@@ -299,6 +303,7 @@ async def run_voice_session(websocket, runner, user_id: str, session_id: str) ->
                 full = (user_buffer["text"] or it.text).strip()
                 user_buffer["text"] = ""
                 _mark_turn_start()   # user finished speaking -> turn clock starts
+                turn["user_text"] = full   # for the Phoenix voice.turn span
                 _mark_agent_start()  # voice: model starts now (judge runs concurrently)
                 await websocket.send_json({
                     "type": "transcript", "role": "user",
@@ -313,6 +318,10 @@ async def run_voice_session(websocket, runner, user_id: str, session_id: str) ->
         if ot and ot.text:
             if turn["agent_t0"] is not None and turn["ttft"] is None:
                 turn["ttft"] = time.monotonic() - turn["agent_t0"]
+            if event.partial:
+                turn["agent_text"] += ot.text     # deltas build the reply
+            elif not turn["agent_text"]:
+                turn["agent_text"] = ot.text       # aggregate if we saw no deltas
             await websocket.send_json({
                 "type": "transcript", "role": "agent",
                 "text": ot.text, "mode": "append" if event.partial else "final",
@@ -320,6 +329,7 @@ async def run_voice_session(websocket, runner, user_id: str, session_id: str) ->
 
         # 3) Tool calls / results (shown as "steps" like the text UI).
         for fc in (event.get_function_calls() or []):
+            turn["tools"].append(fc.name)   # for the Phoenix voice.turn span
             await websocket.send_json({
                 "type": "tool", "phase": "call",
                 "name": fc.name, "detail": _fmt_args(fc.args),
@@ -360,6 +370,22 @@ async def run_voice_session(websocket, runner, user_id: str, session_id: str) ->
                 # so it excludes the judge in BOTH modes. Total (from turn start) still
                 # includes the sequential judge for text.
                 s2s = round(time.monotonic() - turn["agent_t0"], 2) if turn["agent_t0"] else total
+
+                # Emit a readable Phoenix span for the turn. The native Live stream gives
+                # ADK only an opaque `invoke_agent` span (input/output = "--"), so we add
+                # one that actually carries the transcript, reply, tools, and cost.
+                with tracer.start_as_current_span("voice.turn") as _turn_span:
+                    _turn_span.set_attribute(ATTR.OPENINFERENCE_SPAN_KIND, "CHAIN")
+                    _turn_span.set_attribute(ATTR.INPUT_VALUE, turn["user_text"] or "(no transcript)")
+                    _turn_span.set_attribute(ATTR.OUTPUT_VALUE, turn["agent_text"] or "(audio only)")
+                    _turn_span.set_attribute("turn.channel", "voice")
+                    _turn_span.set_attribute("turn.latency_s", total)
+                    if turn["tools"]:
+                        _turn_span.set_attribute("llm.tool_calls", ", ".join(turn["tools"]))
+                    if cost:
+                        _turn_span.set_attribute(ATTR.LLM_TOKEN_COUNT_TOTAL, cost["total_tokens"])
+                        _turn_span.set_attribute(ATTR.LLM_COST_TOTAL, round(cost_model + jcost, 6))
+
                 await websocket.send_json({
                     "type": "timing",
                     "mode": "text" if jmode == "sequential" else "voice",

@@ -187,6 +187,21 @@ drops you straight into the agent CLI. From the project root:
 > `sanitize → Judge → agent → Masker` pipeline → streamed TTS, with per-stage timing and
 > cost shown in the UI.
 
+> **Streaming vs. masking (voice).** Two `.env` flags interact here, with a deliberate
+> interlock — `STREAM_ENABLED = AGENT_RESPONSE_STREAM and not MASK`:
+> - **`MASK=true` (default) → no token streaming.** The full reply is generated, run through
+>   the A2A Masker, and *then* the **masked** text is what gets spoken by TTS and shown on
+>   screen. You can't mask a reply you're already speaking sentence-by-sentence, so the reply
+>   is buffered first. This is the safe path — it does **not** crash.
+> - **`AGENT_RESPONSE_STREAM=true` + `MASK=false` → streaming on.** Each sentence is spoken as
+>   the agent generates it; there is no masking.
+> - **`AGENT_RESPONSE_STREAM=true` + `MASK=true` → streaming is ignored** (a startup warning is
+>   printed). Masking wins; the reply is buffered and masked. Still no crash.
+>
+> Note: the Masker only *actually* redacts PII when `GOOGLE_CLOUD_PROJECT` is set (it uses
+> Google DLP). With it blank, `MASK=true` still runs the Masker step (and its latency) but is
+> effectively a no-op.
+
 It health-checks each service before launching the next, and tears the background services
 down automatically when you exit the CLI (Ctrl-C). Other subcommands:
 

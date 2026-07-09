@@ -47,10 +47,11 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 tracer = init_telemetry()
 
-A2A_JUDGE_HOST = os.getenv("A2A_JUDGE_HOST", "localhost")
-A2A_JUDGE_PORT = int(os.getenv("A2A_JUDGE_PORT", "10002"))
-A2A_MASK_HOST = os.getenv("A2A_MASK_HOST", "localhost")
-A2A_MASK_PORT = int(os.getenv("A2A_MASK_PORT", "10003"))
+# s2s profile — fixed A2A ports (11002/11003), distinct from cascade's 10002/10003.
+A2A_JUDGE_HOST = "localhost"
+A2A_JUDGE_PORT = 11002
+A2A_MASK_HOST = "localhost"
+A2A_MASK_PORT = 11003
 
 # Print each MCP tool call + result inline so the tool-use loop is visible during
 # a request (great for teaching/demos). Set CS_SHOW_TOOL_CALLS=0 to silence.
@@ -66,9 +67,7 @@ def _fmt_tool_args(args) -> str:
     except Exception:
         return str(args)
 
-toolbox_client = ToolboxSyncClient(
-    url="http://127.0.0.1:5000"
-)
+toolbox_client = ToolboxSyncClient(url="http://127.0.0.1:5001")
 
 database_tools = toolbox_client.load_toolset("cs_agent_tools")
 

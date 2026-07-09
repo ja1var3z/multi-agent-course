@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 import threading
 
 import uvicorn
@@ -50,7 +51,14 @@ def start_all_servers(
 
 
 def main():
-    threads = start_all_servers()
+    # s2s profile — fixed A2A ports (11002/11003), distinct from cascade's 10002/10003
+    # so both projects' A2A servers can run at the same time without colliding.
+    threads = start_all_servers(
+        judge_host="localhost",
+        judge_port=11002,
+        mask_host="localhost",
+        mask_port=11003,
+    )
     logger.info("Press Ctrl+C to stop.")
     try:
         for t in threads:

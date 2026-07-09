@@ -36,19 +36,27 @@ PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_NAME="customer-support"
 PY_VERSION="3.12"
 
-PGDATA="${PGDATA:-$HOME/postgres_data}"
+# Load the project's .env EARLY (if present) so the ports below honor its profile.
+# Skipped during first-run `setup` (no .env yet) -> the defaults apply then.
+if [ -f "$PROJECT_DIR/.env" ]; then set -a; . "$PROJECT_DIR/.env"; set +a; fi
+
+# Every port/DB value is env-overridable (defaults = the original values), so a second
+# project runs on its own ports just by shipping a different .env — nothing hard-coded.
+# s2s profile — defaults are this project's OWN ports/DB, distinct from cascade so both
+# run at once. (No PG* in .env — hard-coded here and in cs_agent code.)
 PGHOST="127.0.0.1"
-PGPORT="5432"
+PGPORT="5433"
+PGDATA="${PGDATA:-$HOME/postgres_data_$PGPORT}"   # per-port so two DBs don't clobber
 DB_NAME="toolbox_db"
 DB_USER="toolbox_user"
 DB_PASS="mysecretpassword"
 
-TOOLBOX_PORT="5000"
+TOOLBOX_PORT="5001"
 TOOLBOX_PKG="@toolbox-sdk/server@1.5.0"
-JUDGE_PORT="10002"
-MASK_PORT="10003"
-WEB_PORT="${WEB_PORT:-8000}"
-VOICE_PORT="${VOICE_PORT:-8001}"
+JUDGE_PORT="11002"
+MASK_PORT="11003"
+WEB_PORT="8001"
+VOICE_PORT="8001"
 
 RUN_DIR="$PROJECT_DIR/.run"
 mkdir -p "$RUN_DIR"
@@ -101,7 +109,8 @@ start_postgres() {
   if pg_running; then ok "PostgreSQL already running"; return; fi
   [ -d "$PGDATA" ] || die "No PG data dir at $PGDATA. Run: ./run.sh setup"
   say "Starting PostgreSQL ($PGDATA)"
-  pg_ctl -D "$PGDATA" -l "$PGDATA/logfile" -w start >/dev/null
+  # -o "-p $PGPORT": bind THIS project's port (5433) so it doesn't clash with cascade's 5432.
+  pg_ctl -D "$PGDATA" -l "$PGDATA/logfile" -o "-p $PGPORT" -w start >/dev/null
   pg_running || die "PostgreSQL failed to start (see $PGDATA/logfile)"
   ok "PostgreSQL running on $PGHOST:$PGPORT"
 }
@@ -127,7 +136,7 @@ sources:
   cs-postgres:
     kind: postgres
     host: 127.0.0.1
-    port: 5432
+    port: 5433
     database: toolbox_db
     user: toolbox_user
     password: mysecretpassword
@@ -461,7 +470,7 @@ start_services() {
 cmd_start() {
   start_services
   echo
-  say "Launching agent CLI (Phoenix UI will open at http://localhost:6006)"
+  say "Launching agent CLI (Phoenix UI will open at http://localhost:${PHOENIX_PORT:-6006})"
   echo "----------------------------------------------------------------------"
   # Warnings are silenced in-process (agent_cli sets warnings.showwarning to a
   # no-op). We do NOT filter stderr at the shell here: redirecting stderr makes
@@ -472,7 +481,7 @@ cmd_start() {
 cmd_web() {
   start_services
   echo
-  say "Launching web UI at http://127.0.0.1:$WEB_PORT  (Phoenix at http://localhost:6006)"
+  say "Launching web UI at http://127.0.0.1:$WEB_PORT  (Phoenix at http://localhost:6007)"
   echo "----------------------------------------------------------------------"
   ( cd "$PROJECT_DIR" && WEB_PORT="$WEB_PORT" python -m cs_agent.web \
       2> >(grep --line-buffered -vE "$WARN_FILTER" >&2) )

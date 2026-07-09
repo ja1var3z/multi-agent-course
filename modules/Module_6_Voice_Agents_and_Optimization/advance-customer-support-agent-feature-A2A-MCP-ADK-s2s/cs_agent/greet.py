@@ -1,16 +1,25 @@
+import os
 import psycopg2
 from tabulate import tabulate
+
+
+def _pg():
+    """Open a Postgres connection to THIS project's database (s2s profile — its OWN
+    Postgres on 5433, isolated from cascade's on 5432). Hard-coded on purpose: no PG*
+    env vars (a stray PGUSER would otherwise hijack `run.sh setup`'s own psql)."""
+    return psycopg2.connect(
+        dbname="toolbox_db",
+        user="toolbox_user",
+        password="mysecretpassword",
+        host="127.0.0.1",
+        port="5433",
+    )
+
 
 def display_users():
     try:
         # 1. Connect to your PostgreSQL database
-        conn = psycopg2.connect(
-            dbname="toolbox_db",
-            user="toolbox_user",
-            password="mysecretpassword",
-            host="127.0.0.1",
-            port="5432"
-        )
+        conn = _pg()
         cur = conn.cursor()
 
         # 2. Execute the query
@@ -35,13 +44,7 @@ def display_users():
 def greet_user(user_id):
     try:
         # 1. Connect to your PostgreSQL database
-        conn = psycopg2.connect(
-            dbname="toolbox_db",
-            user="toolbox_user",
-            password="mysecretpassword",
-            host="127.0.0.1",
-            port="5432"
-        )
+        conn = _pg()
         cur = conn.cursor()
         query = "SELECT full_name, email, is_premium_customer, total_items_purchased FROM users WHERE user_id = %s;"
         cur.execute(query, (user_id,))
@@ -61,13 +64,7 @@ def greet_user(user_id):
 def authenticate_user(email: str, password: str):
     """Authenticate a user by email and password stored in the users table."""
     try:
-        conn = psycopg2.connect(
-            dbname="toolbox_db",
-            user="toolbox_user",
-            password="mysecretpassword",
-            host="127.0.0.1",
-            port="5432",
-        )
+        conn = _pg()
         cur = conn.cursor()
         query = """
             SELECT user_id, full_name, email, is_premium_customer, total_items_purchased
@@ -102,13 +99,7 @@ def get_user_actions(email: str):
     Returns empty list on error or if table does not exist.
     """
     try:
-        conn = psycopg2.connect(
-            dbname="toolbox_db",
-            user="toolbox_user",
-            password="mysecretpassword",
-            host="127.0.0.1",
-            port="5432",
-        )
+        conn = _pg()
         cur = conn.cursor()
         query = """
             SELECT id, timestamp, action_type, parameters

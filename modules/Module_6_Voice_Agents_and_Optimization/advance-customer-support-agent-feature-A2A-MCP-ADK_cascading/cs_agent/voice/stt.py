@@ -13,6 +13,8 @@ from functools import lru_cache
 from google import genai
 from google.genai import types
 
+from telemetry import get_tracer, ATTR
+
 STT_MODEL = os.getenv("VOICE_STT_MODEL", "gemini-3.1-flash-lite")
 
 _TRANSCRIBE_PROMPT = (
@@ -69,11 +71,17 @@ async def transcribe(pcm: bytes, sample_rate: int = 16000):
     usage object (audio-in / text-out token counts) so the caller can price the call.
     """
     wav = pcm16_to_wav(pcm, sample_rate)
-    resp = await _client().aio.models.generate_content(
-        model=STT_MODEL,
-        contents=[types.Content(role="user", parts=[
-            types.Part.from_bytes(data=wav, mime_type="audio/wav"),
-            types.Part(text=_TRANSCRIBE_PROMPT),
-        ])],
-    )
+    # Named span so this shows in telemetry as the STT step (not a generic
+    # AsyncGenerateContent). No-op when TELEMETRY is off; the model call nests under it.
+    with get_tracer().start_as_current_span("stt") as _sp:
+        _sp.set_attribute(ATTR.OPENINFERENCE_SPAN_KIND, "VOICE")
+        _sp.set_attribute("voice.stage", "stt")
+        _sp.set_attribute("voice.model", STT_MODEL)
+        resp = await _client().aio.models.generate_content(
+            model=STT_MODEL,
+            contents=[types.Content(role="user", parts=[
+                types.Part.from_bytes(data=wav, mime_type="audio/wav"),
+                types.Part(text=_TRANSCRIBE_PROMPT),
+            ])],
+        )
     return _clean(resp.text or ""), getattr(resp, "usage_metadata", None)
