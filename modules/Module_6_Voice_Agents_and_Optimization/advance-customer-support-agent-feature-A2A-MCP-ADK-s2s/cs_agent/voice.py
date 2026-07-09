@@ -232,7 +232,10 @@ async def run_voice_session(websocket, runner, user_id: str, session_id: str) ->
     turn = {"t0": None, "agent_t0": None, "ttfa": None, "ttft": None, "usage": None,
             "judge_secs": None, "judge_cost": 0.0, "judge_mode": None, "guard_task": None,
             # captured for the Phoenix `voice.turn` span (Live gives no content spans)
-            "user_text": "", "agent_text": "", "tools": []}
+            "user_text": "", "agent_text": "", "tools": [],
+            # tool calls awaiting their result, so we can emit a paired tool.<name> span
+            # (Live delivers the call and the response in separate events)
+            "pending_tools": []}
     session_totals: list[float] = []
     session_cost = {"usd": 0.0, "judge": 0.0}   # usd = S2S model; judge = est. guardrail
     bg: set = set()   # background guardrail tasks (kept referenced so they aren't GC'd)
@@ -244,6 +247,7 @@ async def run_voice_session(websocket, runner, user_id: str, session_id: str) ->
         turn["judge_secs"] = None; turn["judge_cost"] = 0.0
         turn["judge_mode"] = None; turn["guard_task"] = None
         turn["user_text"] = ""; turn["agent_text"] = ""; turn["tools"] = []
+        turn["pending_tools"] = []
 
     def _mark_agent_start() -> None:
         turn["agent_t0"] = time.monotonic()
@@ -330,6 +334,11 @@ async def run_voice_session(websocket, runner, user_id: str, session_id: str) ->
         # 3) Tool calls / results (shown as "steps" like the text UI).
         for fc in (event.get_function_calls() or []):
             turn["tools"].append(fc.name)   # for the Phoenix voice.turn span
+            # Remember the args so the matching response can emit a paired tool span.
+            # (In cascade the call+result arrive together; on Live they're two events.)
+            turn["pending_tools"].append(
+                {"id": getattr(fc, "id", None), "name": fc.name, "args": dict(fc.args or {})}
+            )
             await websocket.send_json({
                 "type": "tool", "phase": "call",
                 "name": fc.name, "detail": _fmt_args(fc.args),
@@ -338,6 +347,10 @@ async def run_voice_session(websocket, runner, user_id: str, session_id: str) ->
                 "args": dict(fc.args or {}),
             })
         for fr in (event.get_function_responses() or []):
+            # Emit a tool.<name> span carrying the args + result, like cascade's
+            # router.py. Live gives no auto tool spans, so we pair the earlier call
+            # (by id, else FIFO by name) with this response. Never breaks the turn.
+            _emit_tool_span(turn["pending_tools"], fr)
             await websocket.send_json({
                 "type": "tool", "phase": "result",
                 "name": fr.name, "detail": _short(fr.response),
@@ -513,3 +526,35 @@ def _fmt_args(args) -> str:
 def _short(value, limit: int = 300) -> str:
     s = str(value)
     return s if len(s) <= limit else s[:limit] + "…"
+
+
+def _emit_tool_span(pending: list, fr) -> None:
+    """Emit a Phoenix `tool.<name>` span for a completed tool call, carrying the
+    input args (paired from the earlier call event) and the result — the same TOOL
+    span cascade's router.py produces inline.
+
+    Live delivers the call and its response as separate events, so we pop the matching
+    entry from `pending` (by id when present, else FIFO by name). No-op when telemetry
+    is off (the tracer is a stub); wrapped so it can never break a voice turn.
+    """
+    try:
+        # Find the matching call: prefer id, else the first same-named pending call.
+        args, idx = {}, None
+        fr_id = getattr(fr, "id", None)
+        for i, call in enumerate(pending):
+            if fr_id is not None and call.get("id") == fr_id:
+                idx = i
+                break
+            if idx is None and call.get("name") == fr.name:
+                idx = i
+        if idx is not None:
+            args = pending.pop(idx).get("args", {}) or {}
+
+        with tracer.start_as_current_span(f"tool.{fr.name}") as span:
+            span.set_attribute(ATTR.OPENINFERENCE_SPAN_KIND, "TOOL")
+            span.set_attribute(ATTR.TOOL_NAME, fr.name)
+            if args:
+                span.set_attribute(ATTR.INPUT_VALUE, json.dumps(args, default=str))
+            span.set_attribute(ATTR.OUTPUT_VALUE, _short(fr.response, 2000))
+    except Exception:  # noqa: BLE001 - telemetry must never break the turn
+        pass

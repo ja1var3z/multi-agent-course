@@ -282,6 +282,11 @@ def make_voice_router(*, runners, session_service, judge, mask) -> APIRouter:
                                     for tc in reversed(tool_calls):
                                         if tc["name"] == fr.name and tc["result"] is None:
                                             tc["result"] = rs[:800]
+                                            with tracer.start_as_current_span(f"tool.{fr.name}") as _tc_span:
+                                                _tc_span.set_attribute(ATTR.OPENINFERENCE_SPAN_KIND, "TOOL")
+                                                _tc_span.set_attribute(ATTR.TOOL_NAME, fr.name)
+                                                _tc_span.set_attribute(ATTR.INPUT_VALUE, json.dumps(tc["args"]))
+                                                _tc_span.set_attribute(ATTR.OUTPUT_VALUE, tc["result"])
                                             break
                             txt = None
                             if event.content and event.content.parts and event.content.parts[0].text:
@@ -328,9 +333,20 @@ def make_voice_router(*, runners, session_service, judge, mask) -> APIRouter:
                             agent_tok["in"] += ti
                             agent_tok["out"] += to
                         for fc in (event.get_function_calls() or []):
-                            call = {"name": fc.name, "args": dict(fc.args or {})}
+                            call = {"name": fc.name, "args": dict(fc.args or {}), "result": None}
                             tool_calls.append(call)
-                            await send_json({"type": "tool_call", **call})
+                            await send_json({"type": "tool_call", "name": fc.name, "args": call["args"]})
+                        for fr in (event.get_function_responses() or []):
+                            rs = json.dumps(fr.response) if isinstance(fr.response, dict) else str(fr.response)
+                            for tc in reversed(tool_calls):
+                                if tc["name"] == fr.name and tc["result"] is None:
+                                    tc["result"] = rs[:800]
+                                    with tracer.start_as_current_span(f"tool.{fr.name}") as _tc_span:
+                                        _tc_span.set_attribute(ATTR.OPENINFERENCE_SPAN_KIND, "TOOL")
+                                        _tc_span.set_attribute(ATTR.TOOL_NAME, fr.name)
+                                        _tc_span.set_attribute(ATTR.INPUT_VALUE, json.dumps(tc["args"]))
+                                        _tc_span.set_attribute(ATTR.OUTPUT_VALUE, tc["result"])
+                                    break
                         if event.is_final_response() and event.content:
                             final_text = event.content.parts[0].text or ""
                     mark("agent_end")
