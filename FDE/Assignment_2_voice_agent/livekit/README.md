@@ -32,6 +32,8 @@ LIVEKIT_API_SECRET=your_livekit_api_secret
 LIVEKIT_ROOM=aurora-demo-room
 ```
 
+You can export them in your shell, or place them in a local `livekit/.env` file. The scripts also check `pipeline/.env`. Do not commit real LiveKit credentials.
+
 ## Create A Room
 
 ```bash

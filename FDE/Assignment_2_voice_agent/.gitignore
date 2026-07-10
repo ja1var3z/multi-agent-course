@@ -2,5 +2,6 @@
 pipeline/.env
 pipeline/.venv/
 livekit/.venv/
+livekit/.env
 __pycache__/
 *.pyc

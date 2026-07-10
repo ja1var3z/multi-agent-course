@@ -16,8 +16,22 @@ from __future__ import annotations
 
 import argparse
 import os
+from pathlib import Path
 
 from livekit import api
+
+
+def _load_env_files() -> None:
+    root = Path(__file__).resolve().parents[1]
+    for path in (root / "pipeline" / ".env", root / "livekit" / ".env"):
+        if not path.exists():
+            continue
+        for raw in path.read_text().splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            os.environ.setdefault(key.strip(), value.strip().strip("\"'"))
 
 
 def _require_env(names: list[str]) -> None:
@@ -28,6 +42,7 @@ def _require_env(names: list[str]) -> None:
 
 
 def main() -> None:
+    _load_env_files()
     _require_env(["LIVEKIT_API_KEY", "LIVEKIT_API_SECRET"])
     parser = argparse.ArgumentParser(description="Create a LiveKit room join token")
     parser.add_argument("--identity", required=True, help="Unique participant identity")
