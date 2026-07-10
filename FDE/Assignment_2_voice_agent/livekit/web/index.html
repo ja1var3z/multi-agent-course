@@ -32,7 +32,7 @@
             <span></span>
           </div>
           <div class="actions">
-            <button data-role="join">Join caller</button>
+            <button data-role="join">Start call</button>
             <button data-role="mute" disabled>Mute</button>
             <button data-role="leave" class="secondary" disabled>Leave</button>
           </div>
@@ -54,7 +54,7 @@
             <span></span>
           </div>
           <div class="actions">
-            <button data-role="join">Join agent</button>
+            <button data-role="join">Show agent in room</button>
             <button data-role="mute" disabled>Mute</button>
             <button data-role="leave" class="secondary" disabled>Leave</button>
           </div>
@@ -81,12 +81,9 @@
           <div class="room-pill" id="provider">Provider: loading</div>
         </div>
         <div id="transcript" class="transcript" aria-live="polite">
-          <div class="empty">Press Talk to agent and ask about hotel availability or booking.</div>
+          <div class="empty">Start the call, then speak naturally after the greeting.</div>
         </div>
-        <div class="voice-row">
-          <button id="voice-agent" type="button" class="voice-button">Talk to agent</button>
-          <span id="voice-status" class="voice-status">Ready</span>
-        </div>
+        <div id="voice-status" class="voice-status">Start call to begin listening</div>
         <form id="agent-form" class="composer">
           <input
             id="caller-message"

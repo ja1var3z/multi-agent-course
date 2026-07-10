@@ -86,16 +86,17 @@ python talk_server.py
 
 Open `http://localhost:5173`:
 
-- Click `Join caller` in the Caller Demo pane.
-- Click `Join agent` in the Aurora Agent pane.
+- Click `Start call` in the Caller Demo pane.
 - Allow microphone access when the browser asks.
-- Click `Talk to agent`, speak a hotel booking request, then click `Stop and send`.
+- Speak naturally after the greeting. The browser detects your pause and sends the turn.
+- Optionally click `Show agent in room` to display the agent participant in room state.
 
-Now both panes are real LiveKit participants in `aurora-demo-room`. This mimics
-the media/session layer. The Conversation panel calls the existing hotel agent
-through `PROVIDER=mock`, `PROVIDER=openai`, or `PROVIDER=groq` from `pipeline/.env`
-and shows the caller/agent transcript directly in the browser. The typed field is
-only a fallback for noisy rooms or microphone issues.
+The caller pane is a real LiveKit participant in `aurora-demo-room`; the optional
+agent pane shows how another participant appears in room state. The conversation
+panel calls the existing hotel agent through `PROVIDER=mock`, `PROVIDER=openai`,
+or `PROVIDER=groq` from `pipeline/.env` and shows the caller/agent transcript
+directly in the browser. The typed field is only a fallback for noisy rooms or
+microphone issues.
 
 To make Aurora answer as the actual hotel agent, the next production step is an
 agent worker that joins as `aurora-agent`, subscribes to caller audio, runs STT,

@@ -342,9 +342,11 @@ Mimic a caller and agent talking, then show the hotel agent transcript:
 python talk_server.py
 ```
 
-Open `http://localhost:5173`. Click `Join caller`, then `Join agent`, and allow
-microphone access when the browser asks. Click `Talk to agent`, speak a hotel
-booking request, then click `Stop and send`.
+Open `http://localhost:5173` and click `Start call`. Allow microphone access,
+listen to the greeting, then speak naturally. The browser detects your pause,
+sends the turn to the provider-backed hotel agent, speaks the reply, and shows
+the transcript. Optionally click `Show agent in room` to display the agent
+participant in room state.
 
 Conceptually:
 

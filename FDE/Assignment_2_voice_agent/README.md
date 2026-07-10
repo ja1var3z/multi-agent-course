@@ -179,10 +179,10 @@ Mimic two people talking in the room and show the hotel agent transcript:
 python talk_server.py
 ```
 
-Open `http://localhost:5173`. Click `Join caller`, then `Join agent`. This tests
-LiveKit audio between two participants in one browser UI. Click `Talk to agent`,
-speak, then click `Stop and send` to talk to the provider-backed hotel agent and
-show the caller/agent transcript directly on screen.
+Open `http://localhost:5173` and click `Start call`. Speak naturally after the
+greeting. The browser detects your pause, sends the turn to the provider-backed
+hotel agent, speaks the reply, and shows the transcript on screen. Optionally
+click `Show agent in room` to display the agent participant in room state.
 
 This does not set up SIP by itself. Real SIP requires a LiveKit SIP trunk and dispatch rule. The room demo is the right intermediate step because it shows the session/media concept before adding phone-number infrastructure.
 

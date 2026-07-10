@@ -6,12 +6,23 @@ const transcriptEl = document.querySelector("#transcript");
 const formEl = document.querySelector("#agent-form");
 const messageEl = document.querySelector("#caller-message");
 const speakToggleEl = document.querySelector("#speak-toggle");
-const voiceAgentEl = document.querySelector("#voice-agent");
 const voiceStatusEl = document.querySelector("#voice-status");
 let speakReplies = true;
 let recorder = null;
 let recordedChunks = [];
-let recordingStream = null;
+let listenStream = null;
+let audioContext = null;
+let analyser = null;
+let vadFrame = null;
+let silenceStartedAt = null;
+let recordingStartedAt = 0;
+let agentBusy = false;
+let agentSpeaking = false;
+let listenCooldownUntil = 0;
+
+const VAD_THRESHOLD = 0.035;
+const ENDPOINT_SILENCE_MS = 850;
+const MIN_TURN_MS = 650;
 
 const clients = {
   caller: {
@@ -107,6 +118,18 @@ function speak(text) {
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.rate = 0.96;
   utterance.pitch = 1.02;
+  agentSpeaking = true;
+  utterance.onstart = () => {
+    agentSpeaking = true;
+    voiceStatusEl.textContent = "Agent speaking";
+  };
+  utterance.onend = () => {
+    agentSpeaking = false;
+    listenCooldownUntil = Date.now() + 700;
+    if (listenStream) {
+      voiceStatusEl.textContent = "Listening. Speak naturally.";
+    }
+  };
   window.speechSynthesis.speak(utterance);
 }
 
@@ -139,6 +162,7 @@ async function sendToAgent(text) {
 }
 
 async function sendAudioToAgent(audioBlob) {
+  agentBusy = true;
   const voicePlaceholder = addTranscript("caller", "Voice message", "transcribing");
   const pending = document.createElement("div");
   pending.className = "bubble agent pending";
@@ -165,51 +189,122 @@ async function sendAudioToAgent(audioBlob) {
   } catch (error) {
     pending.remove();
     addTranscript("agent", error.message);
+  } finally {
+    agentBusy = false;
+    if (!agentSpeaking && listenStream) {
+      voiceStatusEl.textContent = "Listening. Speak naturally.";
+    }
   }
 }
 
-function stopRecording() {
+function stopTurnRecording() {
   if (recorder && recorder.state !== "inactive") {
     recorder.stop();
   }
 }
 
-async function startRecording() {
-  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
-    voiceAgentEl.disabled = true;
-    voiceStatusEl.textContent = "Audio recording is not available in this browser";
-    return;
+function audioLevel() {
+  if (!analyser) return 0;
+  const data = new Uint8Array(analyser.fftSize);
+  analyser.getByteTimeDomainData(data);
+  let sum = 0;
+  for (const sample of data) {
+    const value = (sample - 128) / 128;
+    sum += value * value;
   }
+  return Math.sqrt(sum / data.length);
+}
 
-  if ("speechSynthesis" in window) {
-    window.speechSynthesis.cancel();
-  }
+function startTurnRecording() {
+  if (!listenStream || recorder || agentBusy || agentSpeaking) return;
 
-  recordingStream = await navigator.mediaDevices.getUserMedia({ audio: true });
   recordedChunks = [];
-  recorder = new MediaRecorder(recordingStream);
+  recorder = new MediaRecorder(listenStream);
+  recordingStartedAt = Date.now();
+  silenceStartedAt = null;
   recorder.ondataavailable = (event) => {
     if (event.data.size > 0) {
       recordedChunks.push(event.data);
     }
   };
   recorder.onstop = () => {
-    const audioBlob = new Blob(recordedChunks, { type: recorder.mimeType || "audio/webm" });
-    recordingStream.getTracks().forEach((track) => track.stop());
-    recordingStream = null;
+    const mimeType = recorder.mimeType || "audio/webm";
+    const audioBlob = new Blob(recordedChunks, { type: mimeType });
     recorder = null;
-    voiceAgentEl.textContent = "Talk to agent";
-    voiceAgentEl.classList.remove("listening");
+    recordedChunks = [];
+    if (audioBlob.size < 800) {
+      voiceStatusEl.textContent = "Listening. Speak naturally.";
+      return;
+    }
     voiceStatusEl.textContent = "Transcribing...";
-    sendAudioToAgent(audioBlob).finally(() => {
-      voiceStatusEl.textContent = "Ready";
-    });
+    sendAudioToAgent(audioBlob);
   };
-
   recorder.start();
-  voiceAgentEl.textContent = "Stop and send";
-  voiceAgentEl.classList.add("listening");
-  voiceStatusEl.textContent = "Recording. Speak, then click Stop and send.";
+  voiceStatusEl.textContent = "Listening to caller...";
+}
+
+function vadLoop() {
+  if (!listenStream) return;
+
+  const now = Date.now();
+  const canListen = !agentBusy && !agentSpeaking && now > listenCooldownUntil;
+  const speaking = canListen && audioLevel() > VAD_THRESHOLD;
+
+  if (speaking) {
+    if (!recorder) {
+      startTurnRecording();
+    }
+    silenceStartedAt = null;
+  } else if (recorder) {
+    silenceStartedAt = silenceStartedAt || now;
+    const turnLongEnough = now - recordingStartedAt > MIN_TURN_MS;
+    const silenceLongEnough = now - silenceStartedAt > ENDPOINT_SILENCE_MS;
+    if (turnLongEnough && silenceLongEnough) {
+      stopTurnRecording();
+    }
+  }
+
+  vadFrame = requestAnimationFrame(vadLoop);
+}
+
+async function startPhoneListener() {
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+    voiceStatusEl.textContent = "Audio recording is not available in this browser";
+    return;
+  }
+  if (listenStream) return;
+
+  if ("speechSynthesis" in window) {
+    window.speechSynthesis.cancel();
+  }
+
+  listenStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  audioContext = new AudioContext();
+  const source = audioContext.createMediaStreamSource(listenStream);
+  analyser = audioContext.createAnalyser();
+  analyser.fftSize = 1024;
+  source.connect(analyser);
+  voiceStatusEl.textContent = "Listening. Speak naturally.";
+  vadFrame = requestAnimationFrame(vadLoop);
+  speak("Thanks for calling Aurora Hotel reservations. How can I help?");
+}
+
+function stopPhoneListener() {
+  if (vadFrame) {
+    cancelAnimationFrame(vadFrame);
+    vadFrame = null;
+  }
+  stopTurnRecording();
+  if (listenStream) {
+    listenStream.getTracks().forEach((track) => track.stop());
+    listenStream = null;
+  }
+  if (audioContext) {
+    audioContext.close();
+    audioContext = null;
+  }
+  analyser = null;
+  voiceStatusEl.textContent = "Start call to begin listening";
 }
 
 async function loadState() {
@@ -251,13 +346,21 @@ async function join(client) {
 
   setStatus(client, "Joining room...");
   await client.room.connect(session.url, session.token);
-  await client.room.localParticipant.setMicrophoneEnabled(true);
+  const publishMic = client.identity === "caller-demo";
+  await client.room.localParticipant.setMicrophoneEnabled(publishMic);
 
-  client.muted = false;
-  control(client, "mute").textContent = "Mute";
+  client.muted = !publishMic;
+  control(client, "mute").textContent = publishMic ? "Mute" : "Mic off";
+  control(client, "mute").disabled = !publishMic;
   setControls(client, true);
+  control(client, "mute").disabled = !publishMic;
   setStatus(client, "Connected");
   renderParticipants();
+  if (client.identity === "caller-demo") {
+    startPhoneListener().catch((error) => {
+      voiceStatusEl.textContent = error.message;
+    });
+  }
 }
 
 async function leave(client) {
@@ -269,6 +372,9 @@ async function leave(client) {
   setControls(client, false);
   setStatus(client, "Disconnected");
   renderParticipants();
+  if (client.identity === "caller-demo") {
+    stopPhoneListener();
+  }
 }
 
 async function toggleMute(client) {
@@ -306,18 +412,6 @@ speakToggleEl.addEventListener("click", () => {
   if (!speakReplies && "speechSynthesis" in window) {
     window.speechSynthesis.cancel();
   }
-});
-
-voiceAgentEl.addEventListener("click", () => {
-  if (recorder && recorder.state === "recording") {
-    stopRecording();
-    return;
-  }
-  startRecording().catch((error) => {
-    voiceAgentEl.textContent = "Talk to agent";
-    voiceAgentEl.classList.remove("listening");
-    voiceStatusEl.textContent = error.message;
-  });
 });
 
 loadState();
