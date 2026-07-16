@@ -16,6 +16,16 @@
         TARGET: cfg.target,
       });
     });
+
+    // Apply popup changes LIVE (no page reload): when the saved URL/language
+    // changes, update the shared config and nudge the widget to refresh labels.
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== "sync") return;
+      window.FDE_CONFIG = window.FDE_CONFIG || {};
+      if (changes.apiUrl) window.FDE_CONFIG.API_URL = changes.apiUrl.newValue;
+      if (changes.target) window.FDE_CONFIG.TARGET = changes.target.newValue;
+      window.dispatchEvent(new Event("FDE_CONFIG_CHANGED"));
+    });
   } catch (_) {
     /* storage not available; widget falls back to its default */
   }

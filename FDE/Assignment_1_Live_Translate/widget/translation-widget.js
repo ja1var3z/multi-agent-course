@@ -175,7 +175,7 @@
       <button class="fde-x" type="button" aria-label="Close">${ICON_X}</button>
     </div>
     <div class="fde-body">
-      <p class="fde-lead">Translate this page into Mexican Spanish, then restore it anytime.</p>
+      <p class="fde-lead" id="fde-lead">Translate this page into Mexican Spanish, then restore it anytime.</p>
       <div class="fde-badges" id="fde-badges"></div>
       <button class="fde-btn primary" id="fde-page" type="button">Translate page</button>
       <button class="fde-btn ghost" id="fde-restore" type="button">Restore page</button>
@@ -204,17 +204,25 @@
   function togglePanel() {
     setPanel(!panelOpen);
   }
+  // Reflect the live config (backend URL + target language) in the panel labels.
+  function refreshConfigLabels() {
+    statusEl.textContent = "Backend: " + CONFIG.API_URL;
+    const name = langLabel(CONFIG.TARGET);
+    const sub = panel.querySelector("#fde-sub");
+    if (sub) sub.textContent = "English to " + name;
+    const lead = panel.querySelector("#fde-lead");
+    if (lead) lead.textContent = `Translate this page into ${name}, then restore it anytime.`;
+  }
   function setPanel(open) {
     panelOpen = open;
     panel.classList.toggle("open", open);
-    // Refresh backend + target language from the live config each time we open,
-    // so both reflect what's saved in the popup (resolved after the load race).
-    if (open) {
-      statusEl.textContent = "Backend: " + CONFIG.API_URL;
-      const sub = panel.querySelector("#fde-sub");
-      if (sub) sub.textContent = "English to " + langLabel(CONFIG.TARGET);
-    }
+    if (open) refreshConfigLabels();
   }
+  // content.js fires this when the popup saves a new URL/language, so changes
+  // apply with no page reload — the getters already read the live values.
+  window.addEventListener("FDE_CONFIG_CHANGED", () => {
+    if (panelOpen) refreshConfigLabels();
+  });
 
   async function translatePage() {
     if (busy) return;
