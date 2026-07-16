@@ -1,0 +1,23 @@
+# Python AI service — PRIVATE (no public IP). Only the gateway reaches it,
+# over Fly's internal network at http://<this-app>.internal:8000.
+app = "jorge-livetranslate-ai"
+primary_region = "iad"
+
+[build]
+
+[env]
+  MODEL = "claude-sonnet-4-6"
+  TRANSLATION_DB_PATH = "/data/translations.db"
+
+# Persistent disk for the SQLite cache so it survives machine restarts.
+[mounts]
+  source = "translate_data"
+  destination = "/data"
+
+# No [http_service] block on purpose — that is what keeps this app private.
+# The process listens on port 8000 over the private network; the gateway
+# connects to it directly by DNS name. The Anthropic key never touches the edge.
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

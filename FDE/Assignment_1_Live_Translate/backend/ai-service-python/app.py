@@ -14,11 +14,12 @@ TODOs so the widget lights up. Run:
     cp .env.example .env          # then add your API key
     uvicorn app:app --reload --port 8000
 """
+import asyncio
 import os
 import time
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from pydantic import BaseModel
 
 from lib.cache import TwoTierCache
@@ -63,45 +64,80 @@ async def translate_one(text: str, target: str) -> dict:
 
     t0 = time.perf_counter()
 
-    # -----------------------------------------------------------------------
-    # TODO (YOU) — the caching flow. This is the heart of the assignment.
-    #   1. Ask the cache for `text` (cache.get). If it's a HIT, use it and set
-    #      cached=True — do NOT call the LLM.
-    #   2. On a MISS, call the LLM (translate_text), then store the result
-    #      (cache.set) so the next identical request is a hit. cached=False.
-    #   3. Measure latencyMs from t0 in BOTH paths (a cache hit should be
-    #      dramatically faster — that's the point you're demonstrating).
-    #
-    # cached_value = await cache.get(text, target)
-    # if cached_value is not None:
-    #     ...
-    # else:
-    #     translated = await translate_text(text, target, model=MODEL)
-    #     await cache.set(text, target, translated, model=MODEL)
-    #     ...
-    # -----------------------------------------------------------------------
-    raise NotImplementedError("Implement the cache/LLM flow in translate_one()")
+    cached_value = await cache.get(text, target)
+    if cached_value is not None:
+        latency = int((time.perf_counter() - t0) * 1000)
+        return {"translated": cached_value, "cached": True, "latencyMs": latency, "model": MODEL}
+
+    # MISS — the only path that pays for an LLM call. Errors propagate (502 upstream).
+    translated = await translate_text(text, target, model=MODEL)
+    await cache.set(text, target, translated, model=MODEL)
+    latency = int((time.perf_counter() - t0) * 1000)
+    return {"translated": translated, "cached": False, "latencyMs": latency, "model": MODEL}
 
 
 @app.post("/translate")
-async def translate(body: TranslateIn):
+async def translate(body: TranslateIn, request: Request):
     result = await translate_one(body.text, body.target)
     log.info(
         "translate",
-        extra={"cached": result["cached"], "latencyMs": result["latencyMs"], "chars": len(body.text)},
+        extra={
+            "requestId": request.headers.get("x-request-id", "-"),
+            "cached": result["cached"],
+            "latencyMs": result["latencyMs"],
+            "chars": len(body.text),
+        },
     )
     return result
 
 
+BATCH_CONCURRENCY = int(os.getenv("BATCH_CONCURRENCY", "6"))
+
+
 @app.post("/translate/batch")
-async def translate_batch(body: BatchIn):
+async def translate_batch(body: BatchIn, request: Request):
     t0 = time.perf_counter()
+
+    # De-dupe within the batch (on the stripped text, matching the cache key) so
+    # an identical string is translated ONCE, not N times in parallel — parallel
+    # duplicates would each miss the cache and call the LLM, wasting money and
+    # breaking "never translate the same (text, target) twice".
+    unique = list(dict.fromkeys((t or "").strip() for t in body.texts))
+
+    # Translate the unique strings concurrently, bounded so we don't burst past
+    # the provider's rate limit. Sequential batches from the widget mean this
+    # semaphore caps total in-flight LLM calls for the whole page.
+    sem = asyncio.Semaphore(BATCH_CONCURRENCY)
+
+    async def worker(text: str) -> dict:
+        async with sem:
+            return await translate_one(text, body.target)
+
+    computed = dict(zip(unique, await asyncio.gather(*(worker(u) for u in unique))))
+
+    # Re-expand to one result per original chunk, in order. A repeated chunk
+    # (2nd+ occurrence of the same text in this batch) is a cache hit by
+    # construction — it reused the already-computed value, no LLM call.
     results = []
+    seen: set[str] = set()
     for t in body.texts:
-        results.append(await translate_one(t, body.target))
+        k = (t or "").strip()
+        r = computed[k]
+        cached = r["cached"] if k not in seen else True
+        seen.add(k)
+        results.append({"translated": r["translated"], "cached": cached})
+
     latency = int((time.perf_counter() - t0) * 1000)
     hits = sum(1 for r in results if r["cached"])
-    log.info("translate_batch", extra={"count": len(results), "hits": hits, "latencyMs": latency})
+    log.info(
+        "translate_batch",
+        extra={
+            "requestId": request.headers.get("x-request-id", "-"),
+            "count": len(results),
+            "hits": hits,
+            "latencyMs": latency,
+        },
+    )
     # widget expects {results: [{translated, cached}], latencyMs}
     return {"results": [{"translated": r["translated"], "cached": r["cached"]} for r in results], "latencyMs": latency}
 

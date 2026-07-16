@@ -28,22 +28,38 @@
 
   const CONFIG = Object.assign(
     {
-      API_URL: "http://localhost:8787", // your Node gateway
-      TARGET: "es-MX", // Mexican Spanish
       BATCH_SIZE: 40, // nodes per /translate/batch call
     },
     window.FDE_CONFIG || {}
   );
 
-  // Resolve the backend URL LATE — at call time, not once at load. When the
-  // widget is injected as a content script, window.FDE_CONFIG can be populated
-  // asynchronously (e.g. after the extension reads chrome.storage), which races
-  // this module's synchronous load. Snapshotting API_URL above would lose that
-  // race and get stuck on the default; reading it per use means the current
-  // value always wins, no matter how the widget was loaded.
-  function apiUrl() {
-    return (window.FDE_CONFIG && window.FDE_CONFIG.API_URL) || CONFIG.API_URL;
-  }
+  // Human labels for the target languages the popup offers.
+  const LANG_LABELS = {
+    "es-MX": "Mexican Spanish",
+    "es-ES": "Castilian Spanish",
+    "pt-BR": "Brazilian Portuguese",
+    "fr-FR": "French",
+  };
+  const langLabel = (t) => LANG_LABELS[t] || t;
+
+  // Resolve API_URL and TARGET LAZILY at read time, not once at load. content.js
+  // sets window.FDE_CONFIG from chrome.storage in an ASYNC callback that fires
+  // AFTER this script runs, so a value captured now is always the default (the
+  // config race, per course PR #60). Getters read the live value at each use —
+  // reads happen on user click, long after the callback resolved. (Fix
+  // authorized by the instructor.)
+  Object.defineProperty(CONFIG, "API_URL", {
+    enumerable: true,
+    get() {
+      return (window.FDE_CONFIG && window.FDE_CONFIG.API_URL) || "http://localhost:8787";
+    },
+  });
+  Object.defineProperty(CONFIG, "TARGET", {
+    enumerable: true,
+    get() {
+      return (window.FDE_CONFIG && window.FDE_CONFIG.TARGET) || "es-MX";
+    },
+  });
 
   // ---- state --------------------------------------------------------------
   let panelOpen = false;
@@ -154,16 +170,16 @@
       <span class="fde-hicon">${ICON_LANG}</span>
       <div>
         <div class="fde-title">Live Translate</div>
-        <div class="fde-sub">English to Mexican Spanish</div>
+        <div class="fde-sub" id="fde-sub">English to Mexican Spanish</div>
       </div>
       <button class="fde-x" type="button" aria-label="Close">${ICON_X}</button>
     </div>
     <div class="fde-body">
-      <p class="fde-lead">Translate this page into Mexican Spanish, then restore it anytime.</p>
+      <p class="fde-lead" id="fde-lead">Translate this page into Mexican Spanish, then restore it anytime.</p>
       <div class="fde-badges" id="fde-badges"></div>
       <button class="fde-btn primary" id="fde-page" type="button">Translate page</button>
       <button class="fde-btn ghost" id="fde-restore" type="button">Restore page</button>
-      <div class="fde-status" id="fde-status"></div>
+      <div class="fde-status" id="fde-status">Backend: ${CONFIG.API_URL}</div>
     </div>`;
 
   document.body.appendChild(fab);
@@ -172,10 +188,6 @@
   const badges = panel.querySelector("#fde-badges");
   const statusEl = panel.querySelector("#fde-status");
   const pageBtn = panel.querySelector("#fde-page");
-
-  // Idle hint shows the resolved backend; refreshed each time the panel opens
-  // so a late-arriving FDE_CONFIG is reflected (see apiUrl()).
-  setStatus(backendHint());
 
   // ---- events -------------------------------------------------------------
   fab.addEventListener("click", togglePanel);
@@ -192,11 +204,25 @@
   function togglePanel() {
     setPanel(!panelOpen);
   }
+  // Reflect the live config (backend URL + target language) in the panel labels.
+  function refreshConfigLabels() {
+    statusEl.textContent = "Backend: " + CONFIG.API_URL;
+    const name = langLabel(CONFIG.TARGET);
+    const sub = panel.querySelector("#fde-sub");
+    if (sub) sub.textContent = "English to " + name;
+    const lead = panel.querySelector("#fde-lead");
+    if (lead) lead.textContent = `Translate this page into ${name}, then restore it anytime.`;
+  }
   function setPanel(open) {
     panelOpen = open;
     panel.classList.toggle("open", open);
-    if (open) refreshBackendHint();
+    if (open) refreshConfigLabels();
   }
+  // content.js fires this when the popup saves a new URL/language, so changes
+  // apply with no page reload — the getters already read the live values.
+  window.addEventListener("FDE_CONFIG_CHANGED", () => {
+    if (panelOpen) refreshConfigLabels();
+  });
 
   async function translatePage() {
     if (busy) return;
@@ -249,7 +275,7 @@
 
   // ---- backend I/O --------------------------------------------------------
   async function postJSON(path, body) {
-    const res = await fetch(apiUrl() + path, {
+    const res = await fetch(CONFIG.API_URL + path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -290,20 +316,13 @@
     statusEl.textContent = text;
     statusEl.classList.toggle("err", !!isErr);
   }
-  function backendHint() {
-    return "Backend: " + apiUrl();
-  }
-  function refreshBackendHint() {
-    // refresh only the idle hint — never clobber progress, results, or errors
-    if (statusEl.textContent.startsWith("Backend:")) setStatus(backendHint());
-  }
   function handleError(err) {
     if (err instanceof NotImplemented) {
       setStatus(`${err.path} isn't implemented yet — build it in your backend!`, true);
     } else if (err.message && err.message.startsWith("HTTP")) {
       setStatus(`Backend error (${err.message}). Check your gateway/AI-service logs.`, true);
     } else {
-      setStatus(`Can't reach backend at ${apiUrl()}. Is your Node gateway running?`, true);
+      setStatus(`Can't reach backend at ${CONFIG.API_URL}. Is your Node gateway running?`, true);
     }
     console.error("[FDE]", err);
   }
@@ -320,5 +339,5 @@
   NotImplemented.prototype = Object.create(Error.prototype);
 
   console.log("%c[FDE] Live Translate widget loaded.", "color:#10b981;font-weight:bold");
-  console.log("[FDE] Backend:", apiUrl(), "· open the button bottom-right.");
+  console.log("[FDE] Backend:", CONFIG.API_URL, "· open the button bottom-right.");
 })();

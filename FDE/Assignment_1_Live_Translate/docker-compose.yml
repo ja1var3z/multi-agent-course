@@ -1,0 +1,40 @@
+# One-command local run of the whole product:  docker compose up --build
+#
+# Brings up both services on a private compose network. Only the gateway is
+# published to the host (:8787) — the browser/extension talks to that, exactly
+# like production. The AI service is reachable only from the gateway by its
+# service name (http://ai-service:8000), so the Anthropic key never sits on a
+# host-published port.
+#
+# Requires the AI service's .env to exist with your key:
+#   cp backend/ai-service-python/.env.example backend/ai-service-python/.env   # then add ANTHROPIC_API_KEY
+
+services:
+  ai-service:
+    build: ./backend/ai-service-python
+    # Loads ANTHROPIC_API_KEY (and MODEL) from your existing .env — never committed.
+    env_file: ./backend/ai-service-python/.env
+    environment:
+      # Override the .env's relative DB path onto the persistent volume, and
+      # bind IPv4 for the compose bridge network.
+      TRANSLATION_DB_PATH: /data/translations.db
+      UVICORN_HOST: 0.0.0.0
+    volumes:
+      - translate-data:/data   # SQLite cache survives `docker compose down` + up
+    expose:
+      - "8000"                 # internal-only; NOT published to the host
+    restart: unless-stopped
+
+  gateway:
+    build: ./backend/gateway-node
+    environment:
+      AI_SERVICE_URL: http://ai-service:8000
+      PORT: "8787"
+    ports:
+      - "8787:8787"            # the only host-facing port
+    depends_on:
+      - ai-service
+    restart: unless-stopped
+
+volumes:
+  translate-data:
