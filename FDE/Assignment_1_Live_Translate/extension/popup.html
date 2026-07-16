@@ -7,7 +7,7 @@
       .head { background: #111827; color: #fff; padding: 12px 14px; font-weight: 600; }
       .body { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
       label { font-size: 12px; color: #6b7280; }
-      input { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid #d1d5db; border-radius: 8px; font: inherit; }
+      input, select { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid #d1d5db; border-radius: 8px; font: inherit; background: #fff; }
       button { padding: 8px; border: 1px solid #d1d5db; background: #fff; border-radius: 8px; font: inherit; font-weight: 600; cursor: pointer; }
       button.primary { background: #111827; color: #fff; border-color: #111827; }
       .row { display: flex; gap: 8px; }
@@ -23,6 +23,15 @@
       <div>
         <label>Backend (Node gateway) URL</label>
         <input id="apiUrl" placeholder="http://localhost:8787" />
+      </div>
+      <div>
+        <label>Target language</label>
+        <select id="lang">
+          <option value="es-MX">Mexican Spanish (es-MX)</option>
+          <option value="es-ES">Castilian Spanish (es-ES)</option>
+          <option value="pt-BR">Brazilian Portuguese (pt-BR)</option>
+          <option value="fr-FR">French (fr-FR)</option>
+        </select>
       </div>
       <div class="row">
         <button id="save">Save</button>

@@ -28,12 +28,38 @@
 
   const CONFIG = Object.assign(
     {
-      API_URL: "http://localhost:8787", // your Node gateway
-      TARGET: "es-MX", // Mexican Spanish
       BATCH_SIZE: 40, // nodes per /translate/batch call
     },
     window.FDE_CONFIG || {}
   );
+
+  // Human labels for the target languages the popup offers.
+  const LANG_LABELS = {
+    "es-MX": "Mexican Spanish",
+    "es-ES": "Castilian Spanish",
+    "pt-BR": "Brazilian Portuguese",
+    "fr-FR": "French",
+  };
+  const langLabel = (t) => LANG_LABELS[t] || t;
+
+  // Resolve API_URL and TARGET LAZILY at read time, not once at load. content.js
+  // sets window.FDE_CONFIG from chrome.storage in an ASYNC callback that fires
+  // AFTER this script runs, so a value captured now is always the default (the
+  // config race, per course PR #60). Getters read the live value at each use —
+  // reads happen on user click, long after the callback resolved. (Fix
+  // authorized by the instructor.)
+  Object.defineProperty(CONFIG, "API_URL", {
+    enumerable: true,
+    get() {
+      return (window.FDE_CONFIG && window.FDE_CONFIG.API_URL) || "http://localhost:8787";
+    },
+  });
+  Object.defineProperty(CONFIG, "TARGET", {
+    enumerable: true,
+    get() {
+      return (window.FDE_CONFIG && window.FDE_CONFIG.TARGET) || "es-MX";
+    },
+  });
 
   // ---- state --------------------------------------------------------------
   let panelOpen = false;
@@ -144,7 +170,7 @@
       <span class="fde-hicon">${ICON_LANG}</span>
       <div>
         <div class="fde-title">Live Translate</div>
-        <div class="fde-sub">English to Mexican Spanish</div>
+        <div class="fde-sub" id="fde-sub">English to Mexican Spanish</div>
       </div>
       <button class="fde-x" type="button" aria-label="Close">${ICON_X}</button>
     </div>
@@ -181,6 +207,13 @@
   function setPanel(open) {
     panelOpen = open;
     panel.classList.toggle("open", open);
+    // Refresh backend + target language from the live config each time we open,
+    // so both reflect what's saved in the popup (resolved after the load race).
+    if (open) {
+      statusEl.textContent = "Backend: " + CONFIG.API_URL;
+      const sub = panel.querySelector("#fde-sub");
+      if (sub) sub.textContent = "English to " + langLabel(CONFIG.TARGET);
+    }
   }
 
   async function translatePage() {

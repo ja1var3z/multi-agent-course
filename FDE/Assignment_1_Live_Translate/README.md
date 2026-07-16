@@ -413,3 +413,51 @@ Every FDE project is submitted as a **Product Evaluation + a video demo**.
 - **CORS errors** → the gateway enables CORS for all origins in dev; make sure requests go to the gateway (`:8787`), not the AI service (`:8000`).
 - **macOS port 5000 is taken** → that's AirPlay Receiver. We use `8787`/`8000` on purpose; keep them.
 - **Extension didn't update after a code change** → re-copy the widget into `extension/` and hit *Reload* on `chrome://extensions`.
+
+---
+
+## How I ran it (Jorge Alvarez)
+
+**LLM provider:** Anthropic — model `claude-sonnet-4-6`, called from the Python AI
+service via the `anthropic` SDK. The key lives only in
+`backend/ai-service-python/.env` locally (git-ignored) and as a Fly secret in
+production; it never touches the browser-facing gateway.
+
+**Run locally (two services):**
+```bash
+# AI service
+cd backend/ai-service-python
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env            # add ANTHROPIC_API_KEY
+uvicorn app:app --port 8000
+
+# Gateway (second terminal)
+cd backend/gateway-node
+npm install && cp .env.example .env
+npm start                       # http://localhost:8787
+```
+
+**Or one command (Docker):**
+```bash
+cp backend/ai-service-python/.env.example backend/ai-service-python/.env  # add key
+docker compose up --build       # gateway on :8787, AI service private
+```
+
+**Deployed (Fly.io):** two apps — public gateway `jorge-livetranslate-gw` and
+**private** AI service `jorge-livetranslate-ai` (no public IP; reached only over
+Fly's internal network). SQLite cache on a Fly volume so it survives restarts.
+Public gateway: `https://jorge-livetranslate-gw.fly.dev`.
+
+**Notes on my build:**
+- **Two-tier cache** (in-memory + SQLite), keyed by SHA-256 of `(text, target)`;
+  identical input never calls the LLM twice; verified restart-survival locally
+  and in production.
+- **Tracing:** one `X-Request-Id` correlates a request across both services'
+  logs (`gateway.log`, `ai-service.log`).
+- **Beyond the brief:** concurrent + in-batch-deduped batch translation (cut a
+  cold full-page translate from ~283 s to ~56 s); `docker-compose.yml`; a
+  **language picker** (es-MX · es-ES · pt-BR · fr-FR) threaded through the contract.
+- **Fixed a race in the provided extension** (course PR #60, instructor-authorized)
+  so a saved non-localhost backend URL actually applies — required for the
+  extension to reach the deployed gateway.

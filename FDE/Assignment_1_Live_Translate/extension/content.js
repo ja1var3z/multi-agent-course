@@ -10,8 +10,11 @@
  */
 (function () {
   try {
-    chrome.storage.sync.get({ apiUrl: "http://localhost:8787" }, (cfg) => {
-      window.FDE_CONFIG = Object.assign({}, window.FDE_CONFIG, { API_URL: cfg.apiUrl });
+    chrome.storage.sync.get({ apiUrl: "http://localhost:8787", target: "es-MX" }, (cfg) => {
+      window.FDE_CONFIG = Object.assign({}, window.FDE_CONFIG, {
+        API_URL: cfg.apiUrl,
+        TARGET: cfg.target,
+      });
     });
   } catch (_) {
     /* storage not available; widget falls back to its default */
