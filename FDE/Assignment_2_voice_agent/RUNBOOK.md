@@ -1,6 +1,8 @@
 # Aurora Voice Agent Runbook
 
-This runbook supports a 30 to 40 minute progressive hands-on session after the separate 45 to 50 minute Voice AI presentation. Every stage extends the same Aurora Hotel workflow.
+This runbook supports a preflighted 45-minute progressive demo and hands-on session after the separate Voice AI presentation. Every stage extends the same Aurora Hotel workflow.
+
+The 45-minute clock does not include dependency installation, API-key setup, or microphone permission troubleshooting.
 
 ## Preflight
 
@@ -35,7 +37,42 @@ TTS_BACKEND=system
 TELEMETRY_JSONL=../logs/voice-events.jsonl
 ```
 
+Use `TTS_BACKEND=system` for the no-cost browser voice. Use
+`TTS_BACKEND=provider` to synthesize the greeting and responses with the
+selected provider's `TTS_MODEL` and `TTS_VOICE`. Restart `talk_server.py` after
+changing this setting.
+
 Use `PROVIDER=mock` in commands when no key is available.
+
+Before the session, confirm the offline checks pass:
+
+```bash
+cd FDE/Assignment_2_voice_agent/pipeline
+source .venv/bin/activate
+python smoke_test.py
+python -m unittest -v test_features.py
+```
+
+## Stage 0: Explain The Progressive Build
+
+Introduce the system before running commands:
+
+```text
+text
+-> LLM and tools
+-> RAG and AgentRouter
+-> VAD and STT
+-> TTS
+-> LiveKit room
+-> telemetry and evaluation
+-> SIP and production scale
+```
+
+Use one booking story through every stage:
+
+```text
+I need a room from August 12 to August 14 for two guests.
+```
 
 ## Stage 1: Deterministic Text Agent
 
@@ -74,24 +111,74 @@ Compare the mock and live paths on tool selection, response variability, latency
 
 ## Stage 3: Tools, RAG, Guardrails, And Language Routing
 
-Continue in text mode with these turns:
+### Tools, RAG, And Guardrails
+
+Continue in the live text session from Stage 2:
 
 ```text
 What is the weather?
+What is today's FIFA score?
 What is the cancellation policy?
+```
+
+Verify that weather is redirected to hotel reservations and the cancellation answer uses `search_hotel_knowledge` rather than model memory.
+
+The trace should show `tool.route_selected`, `tool.requested`,
+`retrieval.completed`, and `hotel_policies.md#Cancellation`. The application
+forces retrieval for high-confidence hotel-policy intents so a previous
+off-topic refusal cannot prevent grounding.
+
+### Language Routing
+
+Exit text mode, then run the automated routing proof:
+
+```bash
+cd FDE/Assignment_2_voice_agent/evals
+python run_evals.py --suite core --verbose
+```
+
+Locate `router.language_switch`. This test proves that the same session switches to Spanish, preserves the route on the following turn, and still selects the expected business tool.
+
+Language changes use the structured `set_language` control tool. The model
+proposes the caller's intent. Before changing state, `explicit_language_request()`
+requires the current utterance to explicitly name the requested target language.
+`AgentRouter` then validates `en` or `es`, stores the session state, and supplies
+the matching locale to TTS. Accepted changes show `tool.requested | set_language`
+and `router.language_changed`. Rejected implicit changes show
+`router.language_change_rejected` and leave the current language unchanged.
+
+Then run the live provider in text mode:
+
+```bash
+cd ../pipeline
+python voice_loop.py --text
+```
+
+Use these turns in the same session:
+
+```text
 Please speak Spanish.
+Necesito una habitación para dos personas.
 ¿Cuál es la política de mascotas?
-Switch to English.
-Connect me to the front desk.
+Switch back to English.
+¡Gracias!
+What time is check-in?
 ```
 
 Expected evidence:
 
-- Weather is redirected to hotel reservations.
-- Cancellation and pet policy use `search_hotel_knowledge`.
-- The trace contains the Markdown source section.
+- The pet policy uses `search_hotel_knowledge` after the language switch.
+- The pet-policy source is `hotel_policies.md#Pets`.
 - `AgentRouter` preserves language state across turns.
-- Transfer produces the `transfer` action, which maps to SIP REFER.
+- The Spanish route persists until the caller explicitly switches back to English.
+- `¡Gracias!` does not switch the session back to Spanish because it does not request a language change.
+- The final check-in answer is returned in English.
+
+Testing status:
+
+- Automated multi-turn language routing is verified by the core evaluation suite.
+- Local API routing and Spanish RAG are verified.
+- Live browser speech switching remains a manual acoustic check because it depends on the microphone, speakers, and installed browser voices.
 
 ## Stage 4: Local Voice Cascade
 
@@ -149,6 +236,19 @@ Verify:
 - The transcript shows caller and agent turns.
 - Policy questions show grounding sources.
 - The pipeline and timing panels update.
+- The provider line shows `TTS: <voice>` when provider TTS is enabled, or `Browser TTS` otherwise.
+
+Run this live language sequence:
+
+```text
+Please speak Spanish.
+¿Cuál es la política de cancelación?
+Switch back to English.
+¡Gracias!
+What time is check-in?
+```
+
+Verify that the language badge, response text, selected provider or browser voice, and subsequent turns change together. The Spanish policy turn should show `hotel_policies.md#Cancellation` as its grounding source. After switching to English, `¡Gracias!` must not change the language badge or session route.
 
 ## Stage 6: Turn-Taking And Barge-In
 
@@ -157,7 +257,10 @@ Use the browser controls while the call remains connected.
 1. Set Endpoint silence to 350 ms and speak with a mid-sentence pause.
 2. Set Endpoint silence to 900 ms and repeat the same sentence.
 3. Restore 650 ms.
-4. Speak while Aurora is playing a reply.
+4. Ask for the cancellation policy.
+5. Wait about half a second into Aurora's response.
+6. Interrupt with: `Wait, speak Spanish.`
+7. Ask a second question in Spanish.
 
 Expected evidence:
 
@@ -165,7 +268,11 @@ Expected evidence:
 - Lower endpoint silence responds faster but can cut off a caller.
 - Higher endpoint silence preserves pauses but adds delay.
 - Sustained caller speech cancels playback and records a barge-in event.
+- The browser trace shows `barge_in.candidate` followed by `barge_in.detected` for a confirmed interruption.
+- The server trace shows `barge_in.turn_started` on the caller turn created by that interruption.
 - The next caller turn remains in the same session.
+- The Barge-in metric updates once without creating a feedback loop.
+- The next response follows the Spanish route.
 
 The workshop browser demonstrates playback barge-in. A production streaming system must also cancel active model and TTS work across distributed services.
 
@@ -195,11 +302,10 @@ Conversation text is omitted and sensitive tool fields are redacted by default. 
 
 ```bash
 cd FDE/Assignment_2_voice_agent/evals
-python3 run_evals.py --suite core --verbose
 python3 run_evals.py --suite red-team --verbose
 ```
 
-The deterministic checks assert tools, actions, languages, sources, expected text, and forbidden text. Add a new JSON case before changing the prompt or tools so a behavior change has an explicit acceptance criterion.
+The core suite was already used during language routing. The red-team suite checks prompt injection, policy fabrication, privacy, structured tool input, and multilingual guardrails. Add a new JSON case before changing the prompt or tools so a behavior change has an explicit acceptance criterion.
 
 ## Stage 9: Scale Check
 
@@ -239,20 +345,6 @@ hangup action -> SIP BYE
 public voice edge -> SBC or managed SIP service
 ```
 
-## Recommended Timing
-
-| Time | Stage |
-|------|-------|
-| 0 to 4 minutes | Deterministic text agent |
-| 4 to 9 minutes | Live provider comparison |
-| 9 to 15 minutes | Tools, RAG, guardrails, and routing |
-| 15 to 22 minutes | Local voice and endpointing |
-| 22 to 30 minutes | LiveKit call and barge-in |
-| 30 to 35 minutes | Telemetry |
-| 35 to 38 minutes | Evaluation and red teaming |
-| 38 to 40 minutes | Scale and SIP mapping |
-
-For a 30-minute version, demonstrate the scale command during the presentation and run only one red-team case.
 
 ## Troubleshooting
 
@@ -266,5 +358,6 @@ For a 30-minute version, demonstrate the scale command during the presentation a
 | Background noise starts turns | Increase Speech sensitivity |
 | Turn cuts off early | Increase Endpoint silence |
 | Turn feels slow | Decrease Endpoint silence carefully |
-| Provider TTS fails | Use `TTS_BACKEND=system` |
+| Provider TTS fails | Use `TTS_BACKEND=system` and restart `talk_server.py` |
+| LiveKit uses the system voice | Set `TTS_BACKEND=provider`, restart `talk_server.py`, and confirm the UI shows the provider voice |
 | Live service fails during class | Return to mock text mode and continue the architecture path |
