@@ -44,6 +44,19 @@ PRESETS = {
 }
 
 
+def _env_or_default(key: str, default: str) -> str:
+    """Return a non-empty environment override or the provider preset.
+
+    A copied .env template can leave a comment after an empty assignment.
+    Some dotenv versions preserve that comment as the value, which would send
+    an invalid model ID to the provider.
+    """
+    value = os.getenv(key, "").strip()
+    if not value or value.startswith("#"):
+        return default
+    return value
+
+
 class Provider:
     """Configured client for one backend. Read from .env on construction."""
 
@@ -61,10 +74,10 @@ class Provider:
         self.client = OpenAI(api_key=api_key, base_url=p["base_url"])
 
         # Per-stage overrides fall back to the preset.
-        self.llm_model = os.getenv("LLM_MODEL") or p["llm_model"]
-        self.stt_model = os.getenv("STT_MODEL") or p["stt_model"]
-        self.tts_model = os.getenv("TTS_MODEL") or p["tts_model"]
-        self.tts_voice = os.getenv("TTS_VOICE") or p["tts_voice"]
+        self.llm_model = _env_or_default("LLM_MODEL", p["llm_model"])
+        self.stt_model = _env_or_default("STT_MODEL", p["stt_model"])
+        self.tts_model = _env_or_default("TTS_MODEL", p["tts_model"])
+        self.tts_voice = _env_or_default("TTS_VOICE", p["tts_voice"])
         self.tts_instructions = os.getenv("TTS_INSTRUCTIONS")
         # "provider" = cloud TTS; "system" = local system voice command.
         self.tts_backend = os.getenv("TTS_BACKEND", "provider").lower()

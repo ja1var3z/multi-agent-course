@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import os
 import unittest
+from unittest.mock import patch
 
 os.environ["PROVIDER"] = "mock"
 os.environ.setdefault("TTS_BACKEND", "print")
 
 from agent import Agent
 from knowledge import search_hotel_knowledge
-from providers import make_provider
+from providers import _env_or_default, make_provider
 from router import AgentRouter
 from scale_check import estimate_capacity
 from telemetry import TurnTrace
@@ -22,6 +23,20 @@ class RouterTests(unittest.TestCase):
         self.assertEqual(router.route("Please speak Spanish").language, "es")
         self.assertEqual(router.route("I need a room").language, "es")
         self.assertEqual(router.route("Switch to English").language, "en")
+
+
+class ProviderConfigurationTests(unittest.TestCase):
+    def test_blank_model_override_uses_provider_default(self):
+        with patch.dict(os.environ, {"LLM_MODEL": ""}):
+            self.assertEqual(_env_or_default("LLM_MODEL", "gpt-4o-mini"), "gpt-4o-mini")
+
+    def test_comment_only_model_override_uses_provider_default(self):
+        with patch.dict(os.environ, {"LLM_MODEL": "# example model"}):
+            self.assertEqual(_env_or_default("LLM_MODEL", "gpt-4o-mini"), "gpt-4o-mini")
+
+    def test_explicit_model_override_is_preserved(self):
+        with patch.dict(os.environ, {"LLM_MODEL": "gpt-4.1-mini"}):
+            self.assertEqual(_env_or_default("LLM_MODEL", "gpt-4o-mini"), "gpt-4.1-mini")
 
 
 class RetrievalTests(unittest.TestCase):
