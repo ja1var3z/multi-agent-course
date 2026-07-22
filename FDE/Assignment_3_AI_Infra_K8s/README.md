@@ -1,10 +1,10 @@
 # Assignment 3: AI Infra on Kubernetes (RAG at scale for Moment Search)
 
-> In the earlier labs you rented one GPU and served a model with vLLM. This assignment is
-> what a Forward Deployed Engineer does after that demo: take a working AI application,
-> replace its hosted LLM with an open-source model you serve yourself, and then run that
-> model as a real fleet on Kubernetes, with the break-and-fix experiments that separate
-> a demo from a deploy.
+> So far you have used LLMs the way most of the world does: through a hosted
+> OpenAI-style API. This assignment is where you cross to the other side of that URL.
+> You will serve an open-source model yourself with vLLM for the first time, wire a
+> working AI application to it, and then run it as a real fleet on Kubernetes, with the
+> break-and-fix experiments that separate a demo from a deploy.
 
 The application is **[Moment Search](https://github.com/traversaal-ai/momentsearch)**:
 visual video search and RAG (CLIP retrieval + Qdrant + bring-your-own vision LLM). You
@@ -23,9 +23,9 @@ $10; the $300 GCP free credit covers it many times over. **Teardown is graded.**
 
 ## The two rungs
 
-- **Rung A (warm-up): one box on RunPod.** The same move you made in the vLLM lab, now
-  serving a vision model that a real application depends on. RunPod is perfect here and
-  requires no quota wait.
+- **Rung A (warm-up): one box on RunPod.** Your first time serving a model yourself:
+  one rented GPU, one command, and a vision model that a real application depends on.
+  RunPod is perfect here and requires no quota wait.
 - **Rung B (graded core): the fleet on GKE.** The learning objective of this rung is
   Kubernetes itself: kubectl, node pools, probes, rollouts, autoscaling and cost
   hygiene, on the platform enterprise customers actually run. RunPod and Modal are
@@ -60,8 +60,9 @@ piece is what you are about to own.
 
 ## Part 2, Rung A: one box on RunPod (warm-up)
 
-Rent a single 24 GB+ GPU on RunPod and serve the vision model with vLLM, the same way
-you did in the earlier lab:
+Rent a single 24 GB+ GPU on RunPod and serve the vision model with vLLM. One command
+turns a rented GPU into the same OpenAI-compatible endpoint you have been calling all
+course, except now you own it:
 
 ```bash
 vllm serve Qwen/Qwen2.5-VL-7B-Instruct --max-model-len 8192 --limit-mm-per-prompt image=8
