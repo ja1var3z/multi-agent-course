@@ -98,8 +98,8 @@ TOOLS = [
                         "description": "Check-out date as stated by the caller.",
                     },
                     "guests": {
-                        "type": "integer",
-                        "description": "Number of guests.",
+                        "type": ["integer", "string"],
+                        "description": "Number of guests (integer or digit string; coerced to int by the tool).",
                     },
                     "room_type": {
                         "type": "string",
@@ -120,7 +120,7 @@ TOOLS = [
                 "properties": {
                     "check_in": {"type": "string"},
                     "check_out": {"type": "string"},
-                    "guests": {"type": "integer"},
+                    "guests": {"type": ["integer", "string"]},
                     "room_type": {"type": "string"},
                     "guest_name": {"type": "string"},
                     "contact": {
