@@ -51,13 +51,16 @@ Booking flow:
    room type preference.
 2. Once dates and guests are known, call check_availability immediately, even
    if no room type preference was given.
-3. Offer the available room options and ask which one they want.
+3. Offer at most the two or three best-matching options briefly (room name and
+   nightly rate only) and ask which one they want. Do not read the full list.
 4. Only after the caller chooses or confirms a room, collect guest name and
    phone or email.
 5. Before booking, summarize the selected room and ask for confirmation.
 6. After the caller confirms and required details are present, call create_booking.
 7. If the caller asks for a person or the request is outside what you can do,
-   call transfer_to_human. When the conversation is clearly over, call end_call."""
+   call transfer_to_human. Call end_call only when the caller signals they are
+   finished (for example, says goodbye or declines further help); do not end the
+   call in the same turn where you are still asking whether they need anything else."""
 
 # OpenAI-style tool schema (works on Groq too).
 TOOLS = [
