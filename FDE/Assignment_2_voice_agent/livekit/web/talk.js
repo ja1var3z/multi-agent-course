@@ -229,9 +229,23 @@ function speakWithBrowserVoice(text, locale, token) {
   const voice = chooseVoice(locale);
   if (voice) utterance.voice = voice;
 
+  // Chrome's speechSynthesis intermittently never fires onend, which would leave
+  // agentSpeaking stuck true and silently disable normal turn capture (the mic
+  // "stops working" until a reload). Guard with a watchdog sized generously to the
+  // utterance so it only fires as a fallback if onend/onerror are lost.
+  const watchdogMs = Math.min(60000, 2500 + text.length * 90);
+  let settled = false;
+  const settle = () => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(watchdog);
+    finishAgentPlayback(token); // token-guarded internally; no-op if superseded
+  };
+  const watchdog = setTimeout(settle, watchdogMs);
+
   utterance.onstart = () => beginAgentPlayback(token, "browser");
-  utterance.onend = () => finishAgentPlayback(token);
-  utterance.onerror = () => finishAgentPlayback(token);
+  utterance.onend = settle;
+  utterance.onerror = settle;
   window.speechSynthesis.speak(utterance);
 }
 
@@ -529,18 +543,36 @@ async function prepareListener() {
   setListeningState("Listening", "Speak naturally. Aurora can be interrupted while talking.");
 }
 
+function resetConversation() {
+  transcriptEl.innerHTML = '<div class="empty">The call transcript will appear here.</div>';
+  eventsEl.innerHTML = '<div class="empty">Turn events will appear here.</div>';
+  sourcesEl.textContent = "No retrieval used in the latest turn.";
+  for (const metric of Object.values(metrics)) metric.textContent = "0 ms";
+  for (const element of pipelineEl.querySelectorAll("[data-stage]")) {
+    element.classList.remove("complete");
+  }
+  currentTrace = null;
+}
+
 async function startCall() {
   if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
     throw new Error("This browser does not support the required audio APIs.");
   }
   setCallControls(true);
+  resetConversation();
   agentBusy = true;
   callerStatus.textContent = "Connecting";
   agentStatus.textContent = "Connecting";
   await fetch("/reset", { method: "POST", headers: { "X-Session-ID": sessionId } });
+  // Acquire the mic BEFORE connecting to the room. Until the page holds mic
+  // permission, Chrome hides local host ICE candidates (mDNS obfuscation) and
+  // offers only a public srflx candidate, which can never pair with the loopback
+  // dev server -> room.connect hangs and the mic is never requested. Requesting
+  // the mic first grants permission, exposing the 127.0.0.1 host candidate so ICE
+  // completes locally.
+  await prepareListener();
   agentRoom = await connectParticipant("aurora-agent", "Aurora Agent");
   agentStatus.textContent = "Connected";
-  await prepareListener();
   callerRoom = await connectParticipant("caller-demo", "Caller Demo");
   await callerRoom.localParticipant.publishTrack(listenStream.getAudioTracks()[0], {
     source: Track.Source.Microphone,
